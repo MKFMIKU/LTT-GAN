@@ -1,16 +1,17 @@
 # general settings
 name: train_GFPGANv1_512_simple
 model_type: GFPGANModel
-num_gpu: 4
+num_gpu: 2
 manual_seed: 0
 
 # dataset and data loader settings
 datasets:
   train:
     name: FFHQ
-    type: FFHQDegradationDataset
+    type: FFHQTurbulenceDataset
     # dataroot_gt: datasets/ffhq/ffhq_512.lmdb
-    dataroot_gt: datasets/ffhq/ffhq_512
+    dataroot_gt: /data/datasets/ffhq-dataset/tub300_images512x512
+    phase: train
     io_backend:
       # type: lmdb
       type: disk
@@ -18,21 +19,11 @@ datasets:
     use_hflip: true
     mean: [0.5, 0.5, 0.5]
     std: [0.5, 0.5, 0.5]
-    out_size: 512
-
-    blur_kernel_size: 41
-    kernel_list: ['iso', 'aniso']
-    kernel_prob: [0.5, 0.5]
-    blur_sigma: [0.1, 10]
-    downsample_range: [0.8, 8]
-    noise_range: [0, 20]
-    jpeg_range: [60, 100]
-
     # color jitter and gray
-    color_jitter_prob: 0.3
-    color_jitter_shift: 20
-    color_jitter_pt_prob: 0.3
-    gray_prob: 0.01
+    # color_jitter_prob: 0.3
+    # color_jitter_shift: 20
+    # color_jitter_pt_prob: 0.3
+    # gray_prob: 0.01
 
     # If you do not want colorization, please set
     # color_jitter_prob: ~
@@ -46,8 +37,8 @@ datasets:
 
     # data loader
     use_shuffle: true
-    num_worker_per_gpu: 6
-    batch_size_per_gpu: 3
+    num_worker_per_gpu: 4
+    batch_size_per_gpu: 2
     dataset_enlarge_ratio: 1
     prefetch_mode: ~
 
@@ -55,9 +46,9 @@ datasets:
     # Please modify accordingly to use your own validation
     # Or comment the val block if do not need validation during training
     name: validation
-    type: PairedImageDataset
-    dataroot_lq: datasets/faces/validation/input
-    dataroot_gt: datasets/faces/validation/reference
+    type: FFHQTurbulenceDataset
+    dataroot_gt: /data/datasets/ffhq-dataset/tub300_images512x512
+    phase: val
     io_backend:
       type: disk
     mean: [0.5, 0.5, 0.5]
@@ -205,7 +196,7 @@ logger:
   save_checkpoint_freq: !!float 5e3
   use_tb_logger: true
   wandb:
-    project: ~
+    project: gfpgan
     resume_id: ~
 
 # dist training settings
@@ -213,4 +204,4 @@ dist_params:
   backend: nccl
   port: 29500
 
-find_unused_parameters: true
+find_unused_parameters: false

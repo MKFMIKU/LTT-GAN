@@ -12,6 +12,7 @@ from collections import OrderedDict
 from torch.nn import functional as F
 from torchvision.ops import roi_align
 from tqdm import tqdm
+import numpy as np
 
 
 @MODEL_REGISTRY.register()
@@ -490,7 +491,7 @@ class GFPGANModel(BaseModel):
         pbar = tqdm(total=len(dataloader), unit='image')
 
         for idx, val_data in enumerate(dataloader):
-            img_name = osp.splitext(osp.basename(val_data['lq_path'][0]))[0]
+            img_name = osp.splitext(osp.basename(val_data['gt_path'][0]))[0]
             self.feed_data(val_data)
             self.test()
 
@@ -517,7 +518,7 @@ class GFPGANModel(BaseModel):
                     else:
                         save_img_path = osp.join(self.opt['path']['visualization'], dataset_name,
                                                  f'{img_name}_{self.opt["name"]}.png')
-                imwrite(sr_img, save_img_path)
+                imwrite(np.concatenate((gt_img, sr_img), 1), save_img_path)
 
             if with_metrics:
                 # calculate metrics
