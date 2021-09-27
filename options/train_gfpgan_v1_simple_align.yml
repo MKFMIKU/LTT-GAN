@@ -1,6 +1,6 @@
 # general settings
-name: train_GFPGANv1_512_simple
-model_type: GFPGANModel
+name: train_GFPGANv1_512_simple_align
+model_type: GFPGANAModel
 num_gpu: 1
 manual_seed: 0
 
@@ -19,14 +19,11 @@ datasets:
     use_hflip: true
     mean: [0.5, 0.5, 0.5]
     std: [0.5, 0.5, 0.5]
-
-    noise_range: [0, 20]
-    jpeg_range: [60, 100]
-
     # color jitter and gray
-    color_jitter_prob: 0.3
-    color_jitter_shift: 20
-    color_jitter_pt_prob: 0.3
+    # color_jitter_prob: 0.3
+    # color_jitter_shift: 20
+    # color_jitter_pt_prob: 0.3
+    # gray_prob: 0.01
 
     # If you do not want colorization, please set
     # color_jitter_prob: ~
@@ -40,7 +37,7 @@ datasets:
 
     # data loader
     use_shuffle: true
-    num_worker_per_gpu: 8
+    num_worker_per_gpu: 4
     batch_size_per_gpu: 2
     dataset_enlarge_ratio: 1
     prefetch_mode: ~
@@ -57,12 +54,6 @@ datasets:
     mean: [0.5, 0.5, 0.5]
     std: [0.5, 0.5, 0.5]
     scale: 1
-
-    noise_range: [0, 20]
-    jpeg_range: [60, 100]
-    color_jitter_prob: 0.3
-    color_jitter_shift: 20
-    color_jitter_pt_prob: 0.3
 
 # network structures
 network_g:
@@ -129,10 +120,10 @@ train:
 
   scheduler:
     type: MultiStepLR
-    milestones: [60000, 70000]
+    milestones: [600000, 700000]
     gamma: 0.5
 
-  total_iter: 80000
+  total_iter: 800000
   warmup_iter: -1  # no warm up
 
   # losses
@@ -148,8 +139,8 @@ train:
     reduction: mean
 
   # image pyramid loss
-  pyramid_loss_weight: 1
-  remove_pyramid_loss: 50000
+  pyramid_loss_weight: 0.1
+  remove_pyramid_loss: 5000
   # perceptual loss (content and style losses)
   perceptual_opt:
     type: PerceptualLoss

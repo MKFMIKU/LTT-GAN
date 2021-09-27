@@ -1,5 +1,5 @@
 # general settings
-name: train_GFPGANv1_512_simple
+name: train_GFPGANv1_512_simple_deform
 model_type: GFPGANModel
 num_gpu: 1
 manual_seed: 0
@@ -66,7 +66,7 @@ datasets:
 
 # network structures
 network_g:
-  type: GFPGANv1
+  type: GFPGANDEFORM
   out_size: 512
   num_style_feat: 512
   channel_multiplier: 1
