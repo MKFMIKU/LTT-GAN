@@ -41,43 +41,16 @@ class FFHQTurbulenceDataset(data.Dataset):
         self.jpeg_range = opt['jpeg_range']
 
         # color jitter
-        self.color_jitter_prob = opt.get('color_jitter_prob')
-        self.color_jitter_pt_prob = opt.get('color_jitter_pt_prob')
-        self.color_jitter_shift = opt.get('color_jitter_shift', 20)
-        self.color_jitter_shift /= 255.
-
-
-        if opt['phase'] == 'train':
-            self.paths = self.paths[:7000]
-        if opt['phase'] == 'val':
-            self.paths = self.paths[7000:7100]
-    @staticmethod
-    def color_jitter(img, shift):
-        jitter_val = np.random.uniform(-shift, shift, 3).astype(np.float32)
-        img = img + jitter_val
-        img = np.clip(img, 0, 1)
-        return img
-
-    @staticmethod
-    def color_jitter_pt(img, brightness, contrast, saturation, hue):
-        fn_idx = torch.randperm(4)
-        for fn_id in fn_idx:
-            if fn_id == 0 and brightness is not None:
-                brightness_factor = torch.tensor(1.0).uniform_(brightness[0], brightness[1]).item()
-                img = adjust_brightness(img, brightness_factor)
-
-            if fn_id == 1 and contrast is not None:
-                contrast_factor = torch.tensor(1.0).uniform_(contrast[0], contrast[1]).item()
-                img = adjust_contrast(img, contrast_factor)
-
-            if fn_id == 2 and saturation is not None:
-                saturation_factor = torch.tensor(1.0).uniform_(saturation[0], saturation[1]).item()
-                img = adjust_saturation(img, saturation_factor)
-
-            if fn_id == 3 and hue is not None:
-                hue_factor = torch.tensor(1.0).uniform_(hue[0], hue[1]).item()
-                img = adjust_hue(img, hue_factor)
-        return img
+        if opt['full']:
+            if opt['phase'] == 'train':
+                self.paths = self.paths[:69900]
+            if opt['phase'] == 'val':
+                self.paths = self.paths[69900:]
+        else:
+            if opt['phase'] == 'train':
+                self.paths = self.paths[:7000]
+            if opt['phase'] == 'val':
+                self.paths = self.paths[7000:]
 
     def __getitem__(self, index):
         if self.file_client is None:
@@ -105,19 +78,7 @@ class FFHQTurbulenceDataset(data.Dataset):
         if self.jpeg_range is not None:
             img_lq = degradations.random_add_jpg_compression(img_lq, self.jpeg_range)
 
-        # random color jitter (only for lq)
-        # if self.color_jitter_prob is not None and (np.random.uniform() < self.color_jitter_prob):
-        #     img_lq = self.color_jitter(img_lq, self.color_jitter_shift)
-        # BGR to RGB, HWC to CHW, numpy to tensor
         img_gt, img_lq = img2tensor([img_gt, img_lq], bgr2rgb=True, float32=True)
-
-         # random color jitter (pytorch version) (only for lq)
-        if self.color_jitter_pt_prob is not None and (np.random.uniform() < self.color_jitter_pt_prob):
-            brightness = self.opt.get('brightness', (0.5, 1.5))
-            contrast = self.opt.get('contrast', (0.5, 1.5))
-            saturation = self.opt.get('saturation', (0, 1.5))
-            hue = self.opt.get('hue', (-0.1, 0.1))
-            img_lq = self.color_jitter_pt(img_lq, brightness, contrast, saturation, hue)
 
         # round and clip
         img_lq = torch.clamp((img_lq * 255.0).round(), 0, 255) / 255.

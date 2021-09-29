@@ -8,8 +8,6 @@ def pixel_contextual_loss(x: torch.Tensor,
 
     x = F.pixel_unshuffle(x, window_size)
     y = F.pixel_unshuffle(y, window_size)
-
-    N, C, H, W = x.size()
     dist_raw = compute_cosine_distance(x, y)
     dist_tilde = compute_relative_distance(dist_raw)
     cx = compute_cx(dist_tilde, band_width)
@@ -18,8 +16,13 @@ def pixel_contextual_loss(x: torch.Tensor,
     return cx_loss
 
 def compute_cosine_distance(x, y):
+    # channel-wise vectorization
+    N, C, *_ = x.size()
+    x = x.reshape(N, C, -1)  # (N, C, H*W)
+    y = y.reshape(N, C, -1)  # (N, C, N*H*W)
+
     # mean shifting by channel-wise mean of `y`.
-    y_mu = y.mean(dim=(0, 2, 3), keepdim=True)
+    y_mu = y.mean(dim=(0, 2), keepdim=True)
     x_centered = x - y_mu
     y_centered = y - y_mu
 
@@ -27,14 +30,9 @@ def compute_cosine_distance(x, y):
     x_normalized = F.normalize(x_centered, p=2, dim=1)
     y_normalized = F.normalize(y_centered, p=2, dim=1)
 
-    # channel-wise vectorization
-    N, C, *_ = x.size()
-    x_normalized = x_normalized.reshape(N, C, -1)  # (N, C, H*W)
-    y_normalized = y_normalized.reshape(N, C, -1)  # (N, C, H*W)
-
     # consine similarity
     cosine_sim = torch.bmm(x_normalized.transpose(1, 2),
-                           y_normalized)  # (N, H*W, H*W)
+                           y_normalized)  # (N, H*W, N*H*W)
 
     # convert to distance
     dist = 1 - cosine_sim

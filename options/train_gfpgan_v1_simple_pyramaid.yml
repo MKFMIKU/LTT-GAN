@@ -1,6 +1,6 @@
 # general settings
 name: train_GFPGANv1_512_simple
-model_type: GFPGANModel
+model_type: GFPGANPyramidModel
 num_gpu: 1
 manual_seed: 0
 
@@ -9,9 +9,9 @@ datasets:
   train:
     name: FFHQ
     type: FFHQTurbulenceDataset
-    dataroot_gt: /data/datasets/ffhq-dataset/tub300_images512x512_full
+    dataroot_gt: /data/datasets/ffhq-dataset/tub300_images512x512
     phase: train
-    full: true
+    full: false
     io_backend:
       # type: lmdb
       type: disk
@@ -26,7 +26,7 @@ datasets:
     # data loader
     use_shuffle: true
     num_worker_per_gpu: 8
-    batch_size_per_gpu: 4
+    batch_size_per_gpu: 1
     dataset_enlarge_ratio: 1
     prefetch_mode: ~
 
@@ -35,9 +35,9 @@ datasets:
     # Or comment the val block if do not need validation during training
     name: validation
     type: FFHQTurbulenceDataset
-    dataroot_gt: /data/datasets/ffhq-dataset/tub300_images512x512_full
+    dataroot_gt: /data/datasets/ffhq-dataset/tub300_images512x512
     phase: val
-    full: true
+    full: false
     io_backend:
       type: disk
     mean: [0.5, 0.5, 0.5]
@@ -49,10 +49,10 @@ datasets:
 
 # network structures
 network_g:
-  type: GFPGANv1
+  type: GFPGANPyramid
   out_size: 512
   num_style_feat: 512
-  channel_multiplier: 1
+  channel_multiplier: 2
   resample_kernel: [1, 3, 3, 1]
   decoder_load_path: experiments/pretrained_models/StyleGAN2_512_Cmul1_FFHQ_B12G4_scratch_800k.pth
   fix_decoder: true
@@ -100,10 +100,10 @@ train:
 
   scheduler:
     type: MultiStepLR
-    milestones: [120000, 140000]
+    milestones: [60000, 70000]
     gamma: 0.5
 
-  total_iter: 160000
+  total_iter: 80000
   warmup_iter: -1  # no warm up
 
   # losses
