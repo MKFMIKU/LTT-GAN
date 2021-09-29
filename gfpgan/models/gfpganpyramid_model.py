@@ -369,8 +369,4 @@ class GFPGANPyramidModel(BaseModel):
         self.save_network([self.net_g, self.net_g_ema], 'net_g', current_iter, param_key=['params', 'params_ema'])
         self.save_network(self.net_d, 'net_d', current_iter)
         # save component discriminators
-        if self.use_facial_disc:
-            self.save_network(self.net_d_left_eye, 'net_d_left_eye', current_iter)
-            self.save_network(self.net_d_right_eye, 'net_d_right_eye', current_iter)
-            self.save_network(self.net_d_mouth, 'net_d_mouth', current_iter)
         self.save_training_state(epoch, current_iter)
