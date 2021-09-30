@@ -20,9 +20,6 @@ datasets:
     mean: [0.5, 0.5, 0.5]
     std: [0.5, 0.5, 0.5]
 
-    noise_range: [0, 20]
-    jpeg_range: [60, 100]
-
     # data loader
     use_shuffle: true
     num_worker_per_gpu: 8
@@ -43,9 +40,6 @@ datasets:
     mean: [0.5, 0.5, 0.5]
     std: [0.5, 0.5, 0.5]
     scale: 1
-
-    noise_range: [0, 20]
-    jpeg_range: [60, 100]
 
 # network structures
 network_g:
@@ -144,14 +138,6 @@ train:
     loss_weight: !!float 1e-1
   # r1 regularization for discriminator
   r1_reg_weight: 10
-  # facial component loss
-  # gan_component_opt:
-  #   type: GANLoss
-  #   gan_type: vanilla
-  #   real_label_val: 1.0
-  #   fake_label_val: 0.0
-  #   loss_weight: !!float 1
-  # comp_style_weight: 200
   # identity loss
   identity_weight: 10
 
@@ -161,7 +147,7 @@ train:
 
 # validation settings
 val:
-  val_freq: !!float 5e3
+  val_freq: !!float 1e2
   save_img: true
 
   metrics:

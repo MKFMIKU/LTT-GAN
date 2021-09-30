@@ -16,6 +16,7 @@ from tqdm import tqdm
 import numpy as np
 
 from models.align import pixel_contextual_loss
+from simulator import Simulator
 
 @MODEL_REGISTRY.register()
 class GFPGANPyramidModel(BaseModel):
@@ -43,6 +44,14 @@ class GFPGANPyramidModel(BaseModel):
 
     def init_training_settings(self):
         train_opt = self.opt['train']
+
+        # ----------- define simulator ----------- #
+        self.simulator = Simulator(4, 256,
+            data_path='experiments/pretrained_models/turbulence/',
+            device=torch.cuda.current_device())
+        self.simulator = self.model_to_device(self.simulator)
+        for param in self.simulator.parameters():
+            param.requires_grad = False
 
         # ----------- define net_d ----------- #
         self.net_d = build_network(self.opt['network_d'])
@@ -147,9 +156,11 @@ class GFPGANPyramidModel(BaseModel):
         self.optimizers.append(self.optimizer_d)
 
     def feed_data(self, data):
-        self.lq = data['lq'].to(self.device)
-        if 'gt' in data:
-            self.gt = data['gt'].to(self.device)
+        self.gt = data['gt'].to(self.device)
+        self.lq = F.interpolate(self.gt, 256, mode='bilinear', align_corners=False)
+        with torch.no_grad():
+            self.lq = self.simulator(self.lq.squeeze(0) / 2. + 0.5) * 2. - 1.
+        self.lq = F.interpolate(self.lq.unsqueeze(0), 512, mode='bilinear', align_corners=False)
 
     def construct_img_pyramid(self):
         pyramid_gt = [self.gt]
@@ -191,7 +202,7 @@ class GFPGANPyramidModel(BaseModel):
             if self.cri_pix:
                 l_g_pix = self.cri_pix(self.output, self.gt)
                 l_g_total += l_g_pix
-                loss_dict['l_g_pix'] = l_g_pix * 0.1
+                loss_dict['l_g_pix'] = l_g_pix
 
             # gan loss
             l_g_gan_avg = 0
@@ -204,20 +215,20 @@ class GFPGANPyramidModel(BaseModel):
             loss_dict['l_g_gan'] = l_g_gan_avg
 
             # perceptual loss
-            # if self.cri_perceptual:
-            #     l_g_percep_avg = l_g_style_avg = 0
-            #     for output in self.outputs:
-            #         l_g_percep, l_g_style = self.cri_perceptual(self.output, self.gt)
-            #         l_g_percep_avg += l_g_percep
-            #         l_g_style_avg += l_g_style
-            #     l_g_percep_avg /= self.outputs.size(0)
-            #     l_g_style_avg /= self.outputs.size(0)
-            #     if l_g_percep is not None:
-            #         l_g_total += l_g_percep_avg
-            #         loss_dict['l_g_percep'] = l_g_percep_avg
-            #     if l_g_style is not None:
-            #         l_g_total += l_g_style_avg
-            #         loss_dict['l_g_style'] = l_g_style_avg
+            if self.cri_perceptual:
+                # l_g_percep_avg = l_g_style_avg = 0
+                for output in self.outputs:
+                    l_g_percep, l_g_style = self.cri_perceptual(self.output, self.gt)
+                    # l_g_percep_avg += l_g_percep
+                    # l_g_style_avg += l_g_style
+                # l_g_percep_avg /= self.outputs.size(0)
+                # l_g_style_avg /= self.outputs.size(0)
+                if l_g_percep is not None:
+                    l_g_total += l_g_percep
+                    loss_dict['l_g_percep'] = l_g_percep
+                if l_g_style is not None:
+                    l_g_total += l_g_style
+                    loss_dict['l_g_style'] = l_g_style
 
             # image pyramid loss
             if pyramid_loss_weight > 0:

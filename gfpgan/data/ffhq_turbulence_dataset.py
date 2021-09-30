@@ -27,30 +27,7 @@ class FFHQTurbulenceDataset(data.Dataset):
         self.mean = opt['mean']
         self.std = opt['std']
 
-        if self.io_backend_opt['type'] == 'lmdb':
-            self.io_backend_opt['db_paths'] = self.gt_folder
-            if not self.gt_folder.endswith('.lmdb'):
-                raise ValueError(f"'dataroot_gt' should end with '.lmdb', but received {self.gt_folder}")
-            with open(osp.join(self.gt_folder, 'meta_info.txt')) as fin:
-                self.paths = [line.split('.')[0] for line in fin]
-        else:
-            self.paths = paths_from_folder(self.gt_folder)
-
-        # degradations
-        self.noise_range = opt['noise_range']
-        self.jpeg_range = opt['jpeg_range']
-
-        # color jitter
-        if opt['full']:
-            if opt['phase'] == 'train':
-                self.paths = self.paths[:69900]
-            if opt['phase'] == 'val':
-                self.paths = self.paths[69900:]
-        else:
-            if opt['phase'] == 'train':
-                self.paths = self.paths[:7000]
-            if opt['phase'] == 'val':
-                self.paths = self.paths[7000:]
+        self.paths = paths_from_folder(self.gt_folder)
 
     def __getitem__(self, index):
         if self.file_client is None:
@@ -61,22 +38,13 @@ class FFHQTurbulenceDataset(data.Dataset):
         img_bytes = self.file_client.get(gt_path)
         img_gt = imfrombytes(img_bytes, float32=True)
 
-        img_lq = img_gt[:, 512:]
-        img_gt = img_gt[:, :512]
-
         # random horizontal flip
         if self.opt['phase'] == 'train':
-            img_gt, status = augment(img_gt, hflip=self.opt['use_hflip'], rotation=False, return_status=True)
-            img_lq, status = augment(img_lq, hflip=self.opt['use_hflip'], rotation=False, return_status=True)
-        h, w, _ = img_lq.shape
-
-        # ------------------------ generate lq image ------------------------ #
-        # noise
-        if self.noise_range is not None:
-            img_lq = degradations.random_add_gaussian_noise(img_lq, self.noise_range)
-        # jpeg compression
-        if self.jpeg_range is not None:
-            img_lq = degradations.random_add_jpg_compression(img_lq, self.jpeg_range)
+            img_gt, _ = augment(img_gt, hflip=self.opt['use_hflip'], rotation=False, return_status=True)
+            img_lq = img_gt
+        else:
+            img_lq = img_gt[:, 512:]
+            img_gt = img_gt[:, :512]
 
         img_gt, img_lq = img2tensor([img_gt, img_lq], bgr2rgb=True, float32=True)
 
