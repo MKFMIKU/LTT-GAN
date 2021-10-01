@@ -1,5 +1,5 @@
 # general settings
-name: train_GFPGANv1_512_simple
+name: train_GFPGANv1_512_simple_pyramid
 model_type: GFPGANPyramidModel
 num_gpu: 1
 manual_seed: 0
@@ -9,11 +9,9 @@ datasets:
   train:
     name: FFHQ
     type: FFHQTurbulenceDataset
-    dataroot_gt: /data/datasets/ffhq-dataset/tub300_images512x512
+    dataroot_gt: /data/datasets/ffhq-dataset/sub_images512x512/
     phase: train
-    full: false
     io_backend:
-      # type: lmdb
       type: disk
 
     use_hflip: true
@@ -23,18 +21,15 @@ datasets:
     # data loader
     use_shuffle: true
     num_worker_per_gpu: 8
-    batch_size_per_gpu: 1
+    batch_size_per_gpu: 4
     dataset_enlarge_ratio: 1
     prefetch_mode: ~
 
   val:
-    # Please modify accordingly to use your own validation
-    # Or comment the val block if do not need validation during training
     name: validation
     type: FFHQTurbulenceDataset
-    dataroot_gt: /data/datasets/ffhq-dataset/tub300_images512x512
+    dataroot_gt: /data/datasets/Tubfaces95/validation/
     phase: val
-    full: false
     io_backend:
       type: disk
     mean: [0.5, 0.5, 0.5]
@@ -147,7 +142,7 @@ train:
 
 # validation settings
 val:
-  val_freq: !!float 1e2
+  val_freq: !!float 1e3
   save_img: true
 
   metrics:

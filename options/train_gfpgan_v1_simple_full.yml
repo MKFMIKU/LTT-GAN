@@ -12,7 +12,6 @@ datasets:
     dataroot_gt: /data/datasets/ffhq-dataset/images512x512/
     phase: train
     io_backend:
-      # type: lmdb
       type: disk
 
     use_hflip: true
@@ -21,14 +20,12 @@ datasets:
 
     # data loader
     use_shuffle: true
-    num_worker_per_gpu: 2
-    batch_size_per_gpu: 1
+    num_worker_per_gpu: 8
+    batch_size_per_gpu: 4
     dataset_enlarge_ratio: 1
     prefetch_mode: ~
 
   val:
-    # Please modify accordingly to use your own validation
-    # Or comment the val block if do not need validation during training
     name: validation
     type: FFHQTurbulenceDataset
     dataroot_gt: /data/datasets/Tubfaces95/validation/
@@ -92,10 +89,10 @@ train:
 
   scheduler:
     type: MultiStepLR
-    milestones: [120000, 140000]
+    milestones: [150000, 175000]
     gamma: 0.5
 
-  total_iter: 160000
+  total_iter: 200000
   warmup_iter: -1  # no warm up
 
   # losses
@@ -136,14 +133,6 @@ train:
     loss_weight: !!float 1e-1
   # r1 regularization for discriminator
   r1_reg_weight: 10
-  # facial component loss
-  # gan_component_opt:
-  #   type: GANLoss
-  #   gan_type: vanilla
-  #   real_label_val: 1.0
-  #   fake_label_val: 0.0
-  #   loss_weight: !!float 1
-  # comp_style_weight: 200
   # identity loss
   identity_weight: 10
 
@@ -153,7 +142,7 @@ train:
 
 # validation settings
 val:
-  val_freq: !!float 1e2
+  val_freq: !!float 5e3
   save_img: true
 
   metrics:
@@ -165,7 +154,7 @@ val:
 # logging settings
 logger:
   print_freq: 100
-  save_checkpoint_freq: !!float 5e3
+  save_checkpoint_freq: !!float 1e4
   use_tb_logger: true
   wandb:
     project: gfpgan

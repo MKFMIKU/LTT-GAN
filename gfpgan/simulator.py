@@ -81,7 +81,7 @@ class Simulator(nn.Module):
         pos = torch.stack((MVx[:,:,0],MVy[:,:,1]),2) * self.const
         flow = self.grid+pos
         flow = 2.0*flow / (self.img_size-1) - 1.0
-        out = F.grid_sample(out.view((1,-1,self.img_size,self.img_size)), flow, 'bilinear', padding_mode='border', align_corners=False).squeeze()
+        out = F.grid_sample(out.view((-1,3,self.img_size,self.img_size)), flow.repeat(img.size(0), 1, 1, 1), 'bilinear', padding_mode='border', align_corners=False).squeeze()
 
         return out
 

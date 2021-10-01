@@ -9,7 +9,6 @@ from basicsr.models.base_model import BaseModel
 from basicsr.utils import get_root_logger, imwrite, tensor2img
 from basicsr.utils.registry import MODEL_REGISTRY
 from collections import OrderedDict
-from torch.cuda.random import set_rng_state
 from torch.nn import functional as F
 from torchvision.ops import roi_align
 from tqdm import tqdm
@@ -157,10 +156,7 @@ class GFPGANPyramidModel(BaseModel):
 
     def feed_data(self, data):
         self.gt = data['gt'].to(self.device)
-        self.lq = F.interpolate(self.gt, 256, mode='bilinear', align_corners=False)
-        with torch.no_grad():
-            self.lq = self.simulator(self.lq.squeeze(0) / 2. + 0.5) * 2. - 1.
-        self.lq = F.interpolate(self.lq.unsqueeze(0), 512, mode='bilinear', align_corners=False)
+        self.lq = data['lq'].to(self.device)
 
     def construct_img_pyramid(self):
         pyramid_gt = [self.gt]
@@ -177,6 +173,11 @@ class GFPGANPyramidModel(BaseModel):
         return out_gray
 
     def optimize_parameters(self, current_iter):
+        self.lq = F.interpolate(self.gt, 256, mode='bilinear', align_corners=False)
+        with torch.no_grad():
+            self.lq = self.simulator(self.lq / 2. + 0.5) * 2. - 1.
+        self.lq = F.interpolate(self.lq, 512, mode='bilinear', align_corners=False)
+
         # optimize net_g
         for p in self.net_d.parameters():
             p.requires_grad = False
@@ -204,6 +205,26 @@ class GFPGANPyramidModel(BaseModel):
                 l_g_total += l_g_pix
                 loss_dict['l_g_pix'] = l_g_pix
 
+            # image pyramid loss
+            if pyramid_loss_weight > 0:
+                for i in range(0, self.log_size - 2):
+                    l_pyramid = self.cri_l1(out_rgbs[i], pyramid_gt[i]) * pyramid_loss_weight
+                    l_g_total += l_pyramid
+                    loss_dict[f'l_p_{2**(i+3)}'] = l_pyramid
+
+            # perceptual loss
+            if self.cri_perceptual:
+                l_g_percep, l_g_style = self.cri_perceptual(self.output, self.gt)
+                if l_g_percep is not None:
+                    l_g_total += l_g_percep
+                    loss_dict['l_g_percep'] = l_g_percep
+                if l_g_style is not None:
+                    l_g_total += l_g_style
+                    loss_dict['l_g_style'] = l_g_style
+
+            outputs_flat = self.outputs.transpose(0, 1).transpose(1, 2).reshape(self.outputs.shape[1], -1, *self.outputs.shape[3:])
+            loss_dict['l_g_cx'] = pixel_contextual_loss(self.gt, outputs_flat)
+
             # gan loss
             l_g_gan_avg = 0
             for output in self.outputs:
@@ -213,31 +234,6 @@ class GFPGANPyramidModel(BaseModel):
             l_g_gan_avg /= self.outputs.size(0)
             l_g_total += l_g_gan_avg
             loss_dict['l_g_gan'] = l_g_gan_avg
-
-            # perceptual loss
-            if self.cri_perceptual:
-                # l_g_percep_avg = l_g_style_avg = 0
-                for output in self.outputs:
-                    l_g_percep, l_g_style = self.cri_perceptual(self.output, self.gt)
-                    # l_g_percep_avg += l_g_percep
-                    # l_g_style_avg += l_g_style
-                # l_g_percep_avg /= self.outputs.size(0)
-                # l_g_style_avg /= self.outputs.size(0)
-                if l_g_percep is not None:
-                    l_g_total += l_g_percep
-                    loss_dict['l_g_percep'] = l_g_percep
-                if l_g_style is not None:
-                    l_g_total += l_g_style
-                    loss_dict['l_g_style'] = l_g_style
-
-            # image pyramid loss
-            if pyramid_loss_weight > 0:
-                for i in range(0, self.log_size - 2):
-                    l_pyramid = self.cri_l1(out_rgbs[i], pyramid_gt[i]) * pyramid_loss_weight
-                    l_g_total += l_pyramid
-                    loss_dict[f'l_p_{2**(i+3)}'] = l_pyramid
-            outputs_flat = self.outputs.transpose(0, 1).transpose(1, 2).reshape(self.outputs.shape[1], -1, *self.outputs.shape[3:])
-            loss_dict['l_g_cx'] = pixel_contextual_loss(self.gt, outputs_flat)
 
             # identity loss
             if self.use_identity:

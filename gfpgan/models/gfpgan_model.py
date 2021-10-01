@@ -76,42 +76,6 @@ class GFPGANModel(BaseModel):
         self.net_d.train()
         self.net_g_ema.eval()
 
-        # ----------- facial components networks ----------- #
-        if ('network_d_left_eye' in self.opt and 'network_d_right_eye' in self.opt and 'network_d_mouth' in self.opt):
-            self.use_facial_disc = True
-        else:
-            self.use_facial_disc = False
-
-        if self.use_facial_disc:
-            # left eye
-            self.net_d_left_eye = build_network(self.opt['network_d_left_eye'])
-            self.net_d_left_eye = self.model_to_device(self.net_d_left_eye)
-            self.print_network(self.net_d_left_eye)
-            load_path = self.opt['path'].get('pretrain_network_d_left_eye')
-            if load_path is not None:
-                self.load_network(self.net_d_left_eye, load_path, True, 'params')
-            # right eye
-            self.net_d_right_eye = build_network(self.opt['network_d_right_eye'])
-            self.net_d_right_eye = self.model_to_device(self.net_d_right_eye)
-            self.print_network(self.net_d_right_eye)
-            load_path = self.opt['path'].get('pretrain_network_d_right_eye')
-            if load_path is not None:
-                self.load_network(self.net_d_right_eye, load_path, True, 'params')
-            # mouth
-            self.net_d_mouth = build_network(self.opt['network_d_mouth'])
-            self.net_d_mouth = self.model_to_device(self.net_d_mouth)
-            self.print_network(self.net_d_mouth)
-            load_path = self.opt['path'].get('pretrain_network_d_mouth')
-            if load_path is not None:
-                self.load_network(self.net_d_mouth, load_path, True, 'params')
-
-            self.net_d_left_eye.train()
-            self.net_d_right_eye.train()
-            self.net_d_mouth.train()
-
-            # ----------- define facial component gan loss ----------- #
-            self.cri_component = build_loss(train_opt['gan_component_opt']).to(self.device)
-
         # ----------- define losses ----------- #
         if train_opt.get('pixel_opt'):
             self.cri_pix = build_loss(train_opt['pixel_opt']).to(self.device)
@@ -190,46 +154,9 @@ class GFPGANModel(BaseModel):
         self.optimizer_d = self.get_optimizer(optim_type, optim_params_d, lr, betas=betas)
         self.optimizers.append(self.optimizer_d)
 
-        if self.use_facial_disc:
-            # setup optimizers for facial component discriminators
-            optim_type = train_opt['optim_component'].pop('type')
-            lr = train_opt['optim_component']['lr']
-            # left eye
-            self.optimizer_d_left_eye = self.get_optimizer(
-                optim_type, self.net_d_left_eye.parameters(), lr, betas=(0.9, 0.99))
-            self.optimizers.append(self.optimizer_d_left_eye)
-            # right eye
-            self.optimizer_d_right_eye = self.get_optimizer(
-                optim_type, self.net_d_right_eye.parameters(), lr, betas=(0.9, 0.99))
-            self.optimizers.append(self.optimizer_d_right_eye)
-            # mouth
-            self.optimizer_d_mouth = self.get_optimizer(
-                optim_type, self.net_d_mouth.parameters(), lr, betas=(0.9, 0.99))
-            self.optimizers.append(self.optimizer_d_mouth)
-
     def feed_data(self, data):
+        self.gt = data['gt'].to(self.device)
         self.lq = data['lq'].to(self.device)
-        if 'gt' in data:
-            self.gt = data['gt'].to(self.device)
-
-        if 'loc_left_eye' in data:
-            # get facial component locations, shape (batch, 4)
-            self.loc_left_eyes = data['loc_left_eye']
-            self.loc_right_eyes = data['loc_right_eye']
-            self.loc_mouths = data['loc_mouth']
-
-            # uncomment to check data
-            # import torchvision
-            # if self.opt['rank'] == 0:
-            #     import os
-            #     os.makedirs('tmp/gt', exist_ok=True)
-            #     os.makedirs('tmp/lq', exist_ok=True)
-            #     print(self.idx)
-            #     torchvision.utils.save_image(
-            #         self.gt, f'tmp/gt/gt_{self.idx}.png', nrow=4, padding=2, normalize=True, range=(-1, 1))
-            #     torchvision.utils.save_image(
-            #         self.lq, f'tmp/lq/lq{self.idx}.png', nrow=4, padding=2, normalize=True, range=(-1, 1))
-            #     self.idx = self.idx + 1
 
     def construct_img_pyramid(self):
         pyramid_gt = [self.gt]
@@ -238,54 +165,6 @@ class GFPGANModel(BaseModel):
             down_img = F.interpolate(down_img, scale_factor=0.5, mode='bilinear', align_corners=False)
             pyramid_gt.insert(0, down_img)
         return pyramid_gt
-
-    def get_roi_regions(self, eye_out_size=80, mouth_out_size=120):
-        # hard code
-        face_ratio = int(self.opt['network_g']['out_size'] / 512)
-        eye_out_size *= face_ratio
-        mouth_out_size *= face_ratio
-
-        rois_eyes = []
-        rois_mouths = []
-        for b in range(self.loc_left_eyes.size(0)):  # loop for batch size
-            # left eye and right eye
-            img_inds = self.loc_left_eyes.new_full((2, 1), b)
-            bbox = torch.stack([self.loc_left_eyes[b, :], self.loc_right_eyes[b, :]], dim=0)  # shape: (2, 4)
-            rois = torch.cat([img_inds, bbox], dim=-1)  # shape: (2, 5)
-            rois_eyes.append(rois)
-            # mouse
-            img_inds = self.loc_left_eyes.new_full((1, 1), b)
-            rois = torch.cat([img_inds, self.loc_mouths[b:b + 1, :]], dim=-1)  # shape: (1, 5)
-            rois_mouths.append(rois)
-
-        rois_eyes = torch.cat(rois_eyes, 0).to(self.device)
-        rois_mouths = torch.cat(rois_mouths, 0).to(self.device)
-
-        # real images
-        all_eyes = roi_align(self.gt, boxes=rois_eyes, output_size=eye_out_size) * face_ratio
-        self.left_eyes_gt = all_eyes[0::2, :, :, :]
-        self.right_eyes_gt = all_eyes[1::2, :, :, :]
-        self.mouths_gt = roi_align(self.gt, boxes=rois_mouths, output_size=mouth_out_size) * face_ratio
-        # output
-        all_eyes = roi_align(self.output, boxes=rois_eyes, output_size=eye_out_size) * face_ratio
-        self.left_eyes = all_eyes[0::2, :, :, :]
-        self.right_eyes = all_eyes[1::2, :, :, :]
-        self.mouths = roi_align(self.output, boxes=rois_mouths, output_size=mouth_out_size) * face_ratio
-
-    def _gram_mat(self, x):
-        """Calculate Gram matrix.
-
-        Args:
-            x (torch.Tensor): Tensor with shape of (n, c, h, w).
-
-        Returns:
-            torch.Tensor: Gram matrix.
-        """
-        n, c, h, w = x.size()
-        features = x.view(n, c, w * h)
-        features_t = features.transpose(1, 2)
-        gram = features.bmm(features_t) / (c * h * w)
-        return gram
 
     def gray_resize_for_identity(self, out, size=128):
         out_gray = (0.2989 * out[:, 0, :, :] + 0.5870 * out[:, 1, :, :] + 0.1140 * out[:, 2, :, :])
@@ -304,14 +183,6 @@ class GFPGANModel(BaseModel):
             p.requires_grad = False
         self.optimizer_g.zero_grad()
 
-        if self.use_facial_disc:
-            for p in self.net_d_left_eye.parameters():
-                p.requires_grad = False
-            for p in self.net_d_right_eye.parameters():
-                p.requires_grad = False
-            for p in self.net_d_mouth.parameters():
-                p.requires_grad = False
-
         # image pyramid loss weight
         if current_iter < self.opt['train'].get('remove_pyramid_loss', float('inf')):
             pyramid_loss_weight = self.opt['train'].get('pyramid_loss_weight', 1)
@@ -322,10 +193,6 @@ class GFPGANModel(BaseModel):
             pyramid_gt = self.construct_img_pyramid()
         else:
             self.output, out_rgbs = self.net_g(self.lq, return_rgb=False)
-
-        # get roi-align regions
-        if self.use_facial_disc:
-            self.get_roi_regions(eye_out_size=80, mouth_out_size=120)
 
         l_g_total = 0
         loss_dict = OrderedDict()
@@ -359,44 +226,6 @@ class GFPGANModel(BaseModel):
             l_g_total += l_g_gan
             loss_dict['l_g_gan'] = l_g_gan
 
-            # facial component loss
-            if self.use_facial_disc:
-                # left eye
-                fake_left_eye, fake_left_eye_feats = self.net_d_left_eye(self.left_eyes, return_feats=True)
-                l_g_gan = self.cri_component(fake_left_eye, True, is_disc=False)
-                l_g_total += l_g_gan
-                loss_dict['l_g_gan_left_eye'] = l_g_gan
-                # right eye
-                fake_right_eye, fake_right_eye_feats = self.net_d_right_eye(self.right_eyes, return_feats=True)
-                l_g_gan = self.cri_component(fake_right_eye, True, is_disc=False)
-                l_g_total += l_g_gan
-                loss_dict['l_g_gan_right_eye'] = l_g_gan
-                # mouth
-                fake_mouth, fake_mouth_feats = self.net_d_mouth(self.mouths, return_feats=True)
-                l_g_gan = self.cri_component(fake_mouth, True, is_disc=False)
-                l_g_total += l_g_gan
-                loss_dict['l_g_gan_mouth'] = l_g_gan
-
-                if self.opt['train'].get('comp_style_weight', 0) > 0:
-                    # get gt feat
-                    _, real_left_eye_feats = self.net_d_left_eye(self.left_eyes_gt, return_feats=True)
-                    _, real_right_eye_feats = self.net_d_right_eye(self.right_eyes_gt, return_feats=True)
-                    _, real_mouth_feats = self.net_d_mouth(self.mouths_gt, return_feats=True)
-
-                    def _comp_style(feat, feat_gt, criterion):
-                        return criterion(self._gram_mat(feat[0]), self._gram_mat(
-                            feat_gt[0].detach())) * 0.5 + criterion(
-                                self._gram_mat(feat[1]), self._gram_mat(feat_gt[1].detach()))
-
-                    # facial component style loss
-                    comp_style_loss = 0
-                    comp_style_loss += _comp_style(fake_left_eye_feats, real_left_eye_feats, self.cri_l1)
-                    comp_style_loss += _comp_style(fake_right_eye_feats, real_right_eye_feats, self.cri_l1)
-                    comp_style_loss += _comp_style(fake_mouth_feats, real_mouth_feats, self.cri_l1)
-                    comp_style_loss = comp_style_loss * self.opt['train']['comp_style_weight']
-                    l_g_total += comp_style_loss
-                    loss_dict['l_g_comp_style_loss'] = comp_style_loss
-
             # identity loss
             if self.use_identity:
                 identity_weight = self.opt['train']['identity_weight']
@@ -420,16 +249,6 @@ class GFPGANModel(BaseModel):
         for p in self.net_d.parameters():
             p.requires_grad = True
         self.optimizer_d.zero_grad()
-        if self.use_facial_disc:
-            for p in self.net_d_left_eye.parameters():
-                p.requires_grad = True
-            for p in self.net_d_right_eye.parameters():
-                p.requires_grad = True
-            for p in self.net_d_mouth.parameters():
-                p.requires_grad = True
-            self.optimizer_d_left_eye.zero_grad()
-            self.optimizer_d_right_eye.zero_grad()
-            self.optimizer_d_mouth.zero_grad()
 
         fake_d_pred = self.net_d(self.output.detach())
         real_d_pred = self.net_d(self.gt)
@@ -449,36 +268,6 @@ class GFPGANModel(BaseModel):
             l_d_r1.backward()
 
         self.optimizer_d.step()
-
-        if self.use_facial_disc:
-            # lefe eye
-            fake_d_pred, _ = self.net_d_left_eye(self.left_eyes.detach())
-            real_d_pred, _ = self.net_d_left_eye(self.left_eyes_gt)
-            l_d_left_eye = self.cri_component(
-                real_d_pred, True, is_disc=True) + self.cri_gan(
-                    fake_d_pred, False, is_disc=True)
-            loss_dict['l_d_left_eye'] = l_d_left_eye
-            l_d_left_eye.backward()
-            # right eye
-            fake_d_pred, _ = self.net_d_right_eye(self.right_eyes.detach())
-            real_d_pred, _ = self.net_d_right_eye(self.right_eyes_gt)
-            l_d_right_eye = self.cri_component(
-                real_d_pred, True, is_disc=True) + self.cri_gan(
-                    fake_d_pred, False, is_disc=True)
-            loss_dict['l_d_right_eye'] = l_d_right_eye
-            l_d_right_eye.backward()
-            # mouth
-            fake_d_pred, _ = self.net_d_mouth(self.mouths.detach())
-            real_d_pred, _ = self.net_d_mouth(self.mouths_gt)
-            l_d_mouth = self.cri_component(
-                real_d_pred, True, is_disc=True) + self.cri_gan(
-                    fake_d_pred, False, is_disc=True)
-            loss_dict['l_d_mouth'] = l_d_mouth
-            l_d_mouth.backward()
-
-            self.optimizer_d_left_eye.step()
-            self.optimizer_d_right_eye.step()
-            self.optimizer_d_mouth.step()
 
         self.log_dict = self.reduce_loss_dict(loss_dict)
 
@@ -572,8 +361,4 @@ class GFPGANModel(BaseModel):
         self.save_network([self.net_g, self.net_g_ema], 'net_g', current_iter, param_key=['params', 'params_ema'])
         self.save_network(self.net_d, 'net_d', current_iter)
         # save component discriminators
-        if self.use_facial_disc:
-            self.save_network(self.net_d_left_eye, 'net_d_left_eye', current_iter)
-            self.save_network(self.net_d_right_eye, 'net_d_right_eye', current_iter)
-            self.save_network(self.net_d_mouth, 'net_d_mouth', current_iter)
         self.save_training_state(epoch, current_iter)
