@@ -45,12 +45,13 @@ class GFPGANModel(BaseModel):
         train_opt = self.opt['train']
 
         # ----------- define simulator ----------- #
-        self.simulator = Simulator(4, 256,
-            data_path='experiments/pretrained_models/turbulence/',
-            device=torch.cuda.current_device())
-        self.simulator = self.model_to_device(self.simulator)
-        for param in self.simulator.parameters():
-            param.requires_grad = False
+        # self.simulator = Simulator(5, 512,
+        #     data_path='experiments/pretrained_models/turbulence/',
+        #     corr=-0.01, scale=1,
+        #     device=torch.cuda.current_device())
+        # self.simulator = self.model_to_device(self.simulator)
+        # for param in self.simulator.parameters():
+        #     param.requires_grad = False
 
         # ----------- define net_d ----------- #
         self.net_d = build_network(self.opt['network_d'])
@@ -173,10 +174,8 @@ class GFPGANModel(BaseModel):
         return out_gray
 
     def optimize_parameters(self, current_iter):
-        self.lq = F.interpolate(self.gt, 256, mode='bilinear', align_corners=False)
-        with torch.no_grad():
-            self.lq = self.simulator(self.lq.squeeze(0) / 2. + 0.5) * 2. - 1.
-        self.lq = F.interpolate(self.lq.unsqueeze(0), 512, mode='bilinear', align_corners=False)
+        # with torch.no_grad():
+        #     self.lq = self.simulator(self.lq / 2. + 0.5) * 2. - 1.
 
         # optimize net_g
         for p in self.net_d.parameters():
