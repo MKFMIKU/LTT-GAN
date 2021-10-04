@@ -9,7 +9,7 @@ from torch import nn
 from torch.nn import functional as F
 
 
-class StyleGAN2GeneratorSFTPY(StyleGAN2Generator):
+class StyleGAN2GeneratorSFT(StyleGAN2Generator):
     """StyleGAN2 Generator.
 
     Args:
@@ -33,7 +33,7 @@ class StyleGAN2GeneratorSFTPY(StyleGAN2Generator):
                  lr_mlp=0.01,
                  narrow=1,
                  sft_half=False):
-        super(StyleGAN2GeneratorSFTPY, self).__init__(
+        super(StyleGAN2GeneratorSFT, self).__init__(
             out_size,
             num_style_feat=num_style_feat,
             num_mlp=num_mlp,
@@ -105,55 +105,31 @@ class StyleGAN2GeneratorSFTPY(StyleGAN2Generator):
         out = self.style_conv1(out, latent[:, 0], noise=noise[0])
         skip = self.to_rgb1(out, latent[:, 1])
 
-        multiple_outs = []
-        multiple_outs_tmp = []
-        multiple_skips = []
-        multiple_skips_tmp = []
         i = 1
         for conv1, conv2, noise1, noise2, to_rgb in zip(self.style_convs[::2], self.style_convs[1::2], noise[1::2],
                                                         noise[2::2], self.to_rgbs):
+            out = conv1(out, latent[:, i], noise=noise1)
 
             # the conditions may have fewer levels
             if i < len(conditions):
-                # print("ccc", i, out.shape, conditions[i-1].shape, conditions[i].shape, len(multiple_outs), len(multiple_skips))
                 # SFT part to combine the conditions
-                if i > 6:
-                    if len(multiple_outs) < 1:
-                        multiple_outs = [out]
-                        multiple_skips = [skip]
-                    for multiple_out, multiple_skip in zip(multiple_outs, multiple_skips):
-                        multiple_out = conv1(multiple_out, latent[:, i], noise=noise1)
-                        out_same, out_sft = torch.split(multiple_out, int(multiple_out.size(1) // 2), dim=1)
-                        condition_a1, condition_b1 = torch.split(conditions[i - 1], int(conditions[i - 1].size(1) // 2), dim=1)
-                        condition_a2, condition_b2 = torch.split(conditions[i], int(conditions[i].size(1) // 2), dim=1)
-                        out_a = torch.cat([out_same, out_sft * condition_a1 + condition_a2], dim=1)
-                        out_a = conv2(out_a, latent[:, i + 1], noise=noise2)
-                        out_b = torch.cat([out_same, out_sft * condition_b1 + condition_b2], dim=1)
-                        out_b = conv2(out_b, latent[:, i + 1], noise=noise2)
-                        skip_a = to_rgb(out_a, latent[:, i + 2], multiple_skip)
-                        skip_b = to_rgb(out_b, latent[:, i + 2], multiple_skip)
-                        multiple_outs_tmp.append(out_a)
-                        multiple_outs_tmp.append(out_b)
-                        multiple_skips_tmp.append(skip_a)
-                        multiple_skips_tmp.append(skip_b)
-                    multiple_outs = multiple_outs_tmp
-                    multiple_outs_tmp = []
-                    multiple_skips = multiple_skips_tmp
-                    multiple_skips_tmp = []
-                    i+=2
-                else:
-                    out = conv1(out, latent[:, i], noise=noise1)
+                if self.sft_half:
                     out_same, out_sft = torch.split(out, int(out.size(1) // 2), dim=1)
                     out_sft = out_sft * conditions[i - 1] + conditions[i]
                     out = torch.cat([out_same, out_sft], dim=1)
-                    out = conv2(out, latent[:, i + 1], noise=noise2)
-                    skip = to_rgb(out, latent[:, i + 2], skip)
-                    i += 2
-        # print("len", len(multiple_skips))
+                else:
+                    out = out * conditions[i - 1] + conditions[i]
+
+            out = conv2(out, latent[:, i + 1], noise=noise2)
+            skip = to_rgb(out, latent[:, i + 2], skip)
+            i += 2
+
+        image = skip
+
         if return_latents:
-            return torch.stack(multiple_skips), latent
+            return image, latent
         else:
-            return torch.stack(multiple_skips), None
+            return image, None
 
 
 class ConvUpLayer(nn.Module):
@@ -246,14 +222,14 @@ class ResUpBlock(nn.Module):
 
 
 @ARCH_REGISTRY.register()
-class GFPGANPyramidDenseD(nn.Module):
+class GFPGANDense(nn.Module):
     """Unet + StyleGAN2 decoder with SFT."""
-    # default channel_multiplier = 2 for unet and channel_multiplier // 2 for stylegan
+
     def __init__(
             self,
             out_size,
             num_style_feat=512,
-            channel_multiplier=2,
+            channel_multiplier=1,
             resample_kernel=(1, 3, 3, 1),
             decoder_load_path=None,
             fix_decoder=True,
@@ -265,7 +241,7 @@ class GFPGANPyramidDenseD(nn.Module):
             narrow=1,
             sft_half=False):
 
-        super(GFPGANPyramidDenseD, self).__init__()
+        super(GFPGANDense, self).__init__()
         self.input_is_latent = input_is_latent
         self.different_w = different_w
         self.num_style_feat = num_style_feat
@@ -319,11 +295,11 @@ class GFPGANPyramidDenseD(nn.Module):
         self.final_linear = EqualLinear(
             channels['4'] * 4 * 4, linear_out_channel, bias=True, bias_init_val=0, lr_mul=1, activation=None)
 
-        self.stylegan_decoder = StyleGAN2GeneratorSFTPY(
+        self.stylegan_decoder = StyleGAN2GeneratorSFT(
             out_size=out_size,
             num_style_feat=num_style_feat,
             num_mlp=num_mlp,
-            channel_multiplier=channel_multiplier // 2,
+            channel_multiplier=channel_multiplier,
             resample_kernel=resample_kernel,
             lr_mlp=lr_mlp,
             narrow=narrow,
@@ -362,7 +338,6 @@ class GFPGANPyramidDenseD(nn.Module):
                     ScaledLeakyReLU(0.2),
                     ConvUpLayer(out_channels, out_channels, 3, stride=1, padding=1, bias=True, activate=True),
                     EqualConv2d(out_channels, sft_out_channels, 3, stride=1, padding=1, bias=True, bias_init_val=0)))
-        self.dynamic_embedding = nn.Parameter(torch.ones([16]))
 
     def forward(self,
                 x,
@@ -411,18 +386,18 @@ class GFPGANPyramidDenseD(nn.Module):
             if return_rgb:
                 out_rgbs.append(self.toRGB[i](feat))
 
-        # if save_feat_path is not None:
-        #     torch.save(conditions, save_feat_path)
-        # if load_feat_path is not None:
-        #     conditions = torch.load(load_feat_path)
-        #     conditions = [v.cuda() for v in conditions]
+        if save_feat_path is not None:
+            torch.save(conditions, save_feat_path)
+        if load_feat_path is not None:
+            conditions = torch.load(load_feat_path)
+            conditions = [v.cuda() for v in conditions]
 
         # decoder
-        images, _ = self.stylegan_decoder([style_code],
+        image, _ = self.stylegan_decoder([style_code],
                                          conditions,
                                          return_latents=return_latents,
                                          input_is_latent=self.input_is_latent,
                                          randomize_noise=randomize_noise)
-        avg_image = images * self.dynamic_embedding
 
-        return images, out_rgbs
+        return image, out_rgbs
+

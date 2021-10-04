@@ -1,6 +1,6 @@
 # general settings
-name: train_GFPGANv1_512_simple_cx
-model_type: GFPGANCXModel
+name: train_GFPGANv1_512_simple_blur2_dense
+model_type: GFPGANModel
 num_gpu: 1
 manual_seed: 0
 
@@ -8,21 +8,21 @@ manual_seed: 0
 datasets:
   train:
     name: FFHQ
-    type: FFHQTurbulenceDataset
-    dataroot_gt: /data/datasets/ffhq-dataset/sub_tub_images512x512/
-    phase: train
+    type: FFHQBlurDataset
+    dataroot_gt: /data/datasets/ffhq-dataset/sub_images512x512
     io_backend:
       type: disk
 
     use_hflip: true
     mean: [0.5, 0.5, 0.5]
     std: [0.5, 0.5, 0.5]
+    out_size: 512
 
     blur_kernel_size: 41
     kernel_list: ['iso', 'aniso']
     kernel_prob: [0.5, 0.5]
-    blur_sigma: [0.1, 10]
-    downsample_range: [0.8, 8]
+    blur_sigma: [0.1, 20]
+    downsample_range: [0.8, 16]
 
     # data loader
     use_shuffle: true
@@ -45,7 +45,7 @@ datasets:
 
 # network structures
 network_g:
-  type: GFPGANv1
+  type: GFPGANDense
   out_size: 512
   num_style_feat: 512
   channel_multiplier: 1
