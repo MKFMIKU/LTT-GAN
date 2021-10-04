@@ -4,7 +4,7 @@ import torch.nn.functional as F
 def pixel_contextual_loss(x: torch.Tensor,
                     y: torch.Tensor,
                     window_size: int = 32,
-                    band_width: float = 0.1):
+                    band_width: float = 0.2):
 
     x = F.pixel_unshuffle(x, window_size)
     y = F.pixel_unshuffle(y, window_size)
