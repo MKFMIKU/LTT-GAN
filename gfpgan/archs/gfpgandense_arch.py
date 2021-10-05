@@ -376,7 +376,7 @@ class GFPGANDense(nn.Module):
             # ResUpLayer
             feat = self.conv_body_up[i](feat)
             if i < self.log_size - 3:
-                feat = feat + unet_skips[i + 1]
+                feat = (feat + unet_skips[i + 1]) / 2
             # generate scale and shift for SFT layer
             scale = self.condition_scale[i](dense_feat_group)
             conditions.append(scale.clone())
