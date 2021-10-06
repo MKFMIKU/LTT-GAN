@@ -323,20 +323,25 @@ class GFPGANDense(nn.Module):
                 sft_out_channels = out_channels * 2
 
             dense_channels = 0
-            for j in range(i, self.log_size + 1):
-                dense_channels += channels[f'{2**(j-1)}']
+            if i < self.log_size:
+                for j in range(i + 1, self.log_size + 1):
+                    dense_channels += channels[f'{2**(j-1)}']
+            else:
+                dense_channels = out_channels
 
             self.condition_scale.append(
                 nn.Sequential(
                     EqualConv2d(dense_channels, out_channels, 3, stride=1, padding=1, bias=True, bias_init_val=0),
                     ScaledLeakyReLU(0.2),
-                    ConvUpLayer(out_channels, out_channels, 3, stride=1, padding=1, bias=True, activate=True),
-                    EqualConv2d(out_channels, sft_out_channels, 3, stride=1, padding=1, bias=True, bias_init_val=1)))
+                    EqualConv2d(out_channels, out_channels, 3, stride=1, padding=1, bias=True, bias_init_val=0),
+                    ScaledLeakyReLU(0.2),
+                    EqualConv2d(out_channels, sft_out_channels, 3, stride=1, padding=1, bias=True, bias_init_val=1))),
             self.condition_shift.append(
                 nn.Sequential(
                     EqualConv2d(dense_channels, out_channels, 3, stride=1, padding=1, bias=True, bias_init_val=0),
                     ScaledLeakyReLU(0.2),
-                    ConvUpLayer(out_channels, out_channels, 3, stride=1, padding=1, bias=True, activate=True),
+                    EqualConv2d(out_channels, out_channels, 3, stride=1, padding=1, bias=True, bias_init_val=0),
+                    ScaledLeakyReLU(0.2),
                     EqualConv2d(out_channels, sft_out_channels, 3, stride=1, padding=1, bias=True, bias_init_val=0)))
 
     def forward(self,
@@ -365,18 +370,19 @@ class GFPGANDense(nn.Module):
 
         # decode
         for i in range(self.log_size - 2):
-            dense_feat_group = [feat]
-            feat_h, feat_w = feat.shape[-2:]
-            for j in range(i+1, self.log_size - 2):
-                dense_feat_group.append(F.interpolate(unet_skips[j], size=(feat_h, feat_w), mode='bilinear', align_corners=False))
-            dense_feat_group = torch.cat(dense_feat_group, dim=1)
-
             # add unet skip
-            feat = feat + unet_skips[i]
+            # feat = feat + unet_skips[i]
             # ResUpLayer
             feat = self.conv_body_up[i](feat)
             if i < self.log_size - 3:
-                feat = (feat + unet_skips[i + 1]) / 2
+                feat = feat + unet_skips[i + 1]
+
+            dense_feat_group = [feat]
+            feat_h, feat_w = feat.shape[-2:]
+            for j in range(i+2, self.log_size - 2):
+                dense_feat_group.append(F.interpolate(unet_skips[j], size=(feat_h, feat_w), mode='bilinear'))
+            dense_feat_group = torch.cat(dense_feat_group, dim=1)
+
             # generate scale and shift for SFT layer
             scale = self.condition_scale[i](dense_feat_group)
             conditions.append(scale.clone())

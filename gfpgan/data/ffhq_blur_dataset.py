@@ -12,6 +12,7 @@ from basicsr.utils.registry import DATASET_REGISTRY
 from torchvision.transforms.functional import (adjust_brightness, adjust_contrast, adjust_hue, adjust_saturation,
                                                normalize)
 
+import imgaug.augmenters as iaa
 
 @DATASET_REGISTRY.register()
 class FFHQBlurDataset(data.Dataset):
@@ -44,12 +45,14 @@ class FFHQBlurDataset(data.Dataset):
             self.paths = paths_from_folder(self.gt_folder)
 
         # degradations
-        self.blur_kernel_size = opt['blur_kernel_size']
+        self.blur_kernel_range = opt['blur_kernel_range']
         self.kernel_list = opt['kernel_list']
         self.kernel_prob = opt['kernel_prob']
         self.blur_sigma = opt['blur_sigma']
         self.downsample_range = opt['downsample_range']
-        # self.noise_range = opt['noise_range']
+        self.noise_range = opt['noise_range']
+
+        self.deformation = iaa.ElasticTransformation(alpha=(0, 50.0), sigma=(4.0, 5.0))
         # self.jpeg_range = opt['jpeg_range']
 
         # color jitter
@@ -145,20 +148,21 @@ class FFHQBlurDataset(data.Dataset):
 
         # ------------------------ generate lq image ------------------------ #
         # blur
+        img_lq = self.deformation(image=img_gt)
         kernel = degradations.random_mixed_kernels(
             self.kernel_list,
             self.kernel_prob,
-            self.blur_kernel_size,
+            int(np.random.uniform(self.blur_kernel_range[0], self.blur_kernel_range[1]))*2+1,
             self.blur_sigma,
             self.blur_sigma, [-math.pi, math.pi],
             noise_range=None)
-        img_lq = cv2.filter2D(img_gt, -1, kernel)
+        img_lq = cv2.filter2D(img_lq, -1, kernel)
         # downsample
         scale = np.random.uniform(self.downsample_range[0], self.downsample_range[1])
         img_lq = cv2.resize(img_lq, (int(w // scale), int(h // scale)), interpolation=cv2.INTER_LINEAR)
         # noise
-        # if self.noise_range is not None:
-        #     img_lq = degradations.random_add_gaussian_noise(img_lq, self.noise_range)
+        if self.noise_range is not None:
+            img_lq = degradations.random_add_gaussian_noise(img_lq, self.noise_range)
         # # jpeg compression
         # if self.jpeg_range is not None:
         #     img_lq = degradations.random_add_jpg_compression(img_lq, self.jpeg_range)

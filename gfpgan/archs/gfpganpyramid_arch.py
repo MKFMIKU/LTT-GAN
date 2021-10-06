@@ -117,7 +117,7 @@ class StyleGAN2GeneratorSFTPY(StyleGAN2Generator):
             if i < len(conditions):
                 # print("ccc", i, out.shape, conditions[i-1].shape, conditions[i].shape, len(multiple_outs), len(multiple_skips))
                 # SFT part to combine the conditions
-                if i > 7:
+                if i > 6:
                     if len(multiple_outs) < 1:
                         multiple_outs = [out]
                         multiple_skips = [skip]
@@ -276,7 +276,7 @@ class GFPGANPyramid(nn.Module):
             '8': int(512 * unet_narrow),
             '16': int(512 * unet_narrow),
             '32': int(512 * unet_narrow),
-            '64': int(256 * unet_narrow),
+            '64': int(256 * channel_multiplier * unet_narrow),
             '128': int(128 * channel_multiplier * unet_narrow),
             '256': int(64 * channel_multiplier * unet_narrow),
             '512': int(32 * channel_multiplier * unet_narrow),
@@ -386,21 +386,20 @@ class GFPGANPyramid(nn.Module):
             feat = feat + unet_skips[i]
             # ResUpLayer
             feat = self.conv_body_up[i](feat)
-            dense_feat = (feat + unet_skips[i+1] if i < self.log_size - 3 else feat) / 2
             # generate scale and shift for SFT layer
-            scale = self.condition_scale[i](dense_feat)
+            scale = self.condition_scale[i](feat)
             conditions.append(scale.clone())
-            shift = self.condition_shift[i](dense_feat)
+            shift = self.condition_shift[i](feat)
             conditions.append(shift.clone())
             # generate rgb images
             if return_rgb:
                 out_rgbs.append(self.toRGB[i](feat))
 
-        if save_feat_path is not None:
-            torch.save(conditions, save_feat_path)
-        if load_feat_path is not None:
-            conditions = torch.load(load_feat_path)
-            conditions = [v.cuda() for v in conditions]
+        # if save_feat_path is not None:
+        #     torch.save(conditions, save_feat_path)
+        # if load_feat_path is not None:
+        #     conditions = torch.load(load_feat_path)
+        #     conditions = [v.cuda() for v in conditions]
 
         # decoder
         images, _ = self.stylegan_decoder([style_code],

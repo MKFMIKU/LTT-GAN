@@ -202,6 +202,8 @@ class GFPGANPyramidModel(BaseModel):
             #     l_g_pix = self.cri_pix(self.output, self.gt)
             #     l_g_total += l_g_pix
             #     loss_dict['l_g_pix'] = l_g_pix
+            outputs_flat = self.outputs.transpose(0, 1).transpose(1, 2).reshape(self.outputs.shape[0], -1, *self.outputs.shape[3:])
+            loss_dict['l_g_cx'] = pixel_contextual_loss(outputs_flat, self.gt)
 
             # image pyramid loss
             if pyramid_loss_weight > 0:
@@ -219,9 +221,6 @@ class GFPGANPyramidModel(BaseModel):
                 if l_g_style is not None:
                     l_g_total += l_g_style
                     loss_dict['l_g_style'] = l_g_style
-
-            outputs_flat = self.outputs.transpose(0, 1).transpose(1, 2).reshape(self.outputs.shape[1], -1, *self.outputs.shape[3:])
-            loss_dict['l_g_cx'] = pixel_contextual_loss(self.gt, outputs_flat)
 
             # gan loss
             l_g_gan_avg = 0
