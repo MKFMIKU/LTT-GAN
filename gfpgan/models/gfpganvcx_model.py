@@ -14,21 +14,26 @@ from torchvision.ops import roi_align
 from tqdm import tqdm
 import numpy as np
 
+from basicsr.archs.vgg_arch import VGGFeatureExtractor
 from models.align import pixel_contextual_loss
 from simulator import Simulator
 
+import contextual_loss.functional as CF
+
 @MODEL_REGISTRY.register()
-class GFPGANPyramidModel(BaseModel):
+class GFPGANVCXModel(BaseModel):
     """GFPGAN model for <Towards real-world blind face restoratin with generative facial prior>"""
 
     def __init__(self, opt):
-        super(GFPGANPyramidModel, self).__init__(opt)
+        super(GFPGANVCXModel, self).__init__(opt)
         self.idx = 0
 
         # define network
         self.net_g = build_network(opt['network_g'])
         self.net_g = self.model_to_device(self.net_g)
         self.print_network(self.net_g)
+
+        self.vgg = VGGFeatureExtractor({'conv3_4'}).to(self.device)
 
         # load pretrained model
         load_path = self.opt['path'].get('pretrain_network_g', None)
@@ -45,8 +50,9 @@ class GFPGANPyramidModel(BaseModel):
         train_opt = self.opt['train']
 
         # ----------- define simulator ----------- #
-        # self.simulator = Simulator(4, 256,
+        # self.simulator = Simulator(5, 512,
         #     data_path='experiments/pretrained_models/turbulence/',
+        #     corr=-0.01, scale=1,
         #     device=torch.cuda.current_device())
         # self.simulator = self.model_to_device(self.simulator)
         # for param in self.simulator.parameters():
@@ -187,12 +193,10 @@ class GFPGANPyramidModel(BaseModel):
         else:
             pyramid_loss_weight = 1e-12  # very small loss
         if pyramid_loss_weight > 0:
-            self.outputs, out_rgbs = self.net_g(self.lq, return_rgb=True)
-            self.output = torch.mean(self.outputs, dim=0)
+            self.output, out_rgbs = self.net_g(self.lq, return_rgb=True)
             pyramid_gt = self.construct_img_pyramid()
         else:
-            self.outputs, out_rgbs = self.net_g(self.lq, return_rgb=False)
-            self.output = torch.mean(self.outputs, dim=0)
+            self.output, out_rgbs = self.net_g(self.lq, return_rgb=False)
 
         l_g_total = 0
         loss_dict = OrderedDict()
@@ -202,8 +206,9 @@ class GFPGANPyramidModel(BaseModel):
             #     l_g_pix = self.cri_pix(self.output, self.gt)
             #     l_g_total += l_g_pix
             #     loss_dict['l_g_pix'] = l_g_pix
-            outputs_flat = self.outputs.transpose(0, 1).transpose(1, 2).reshape(self.outputs.shape[0], -1, *self.outputs.shape[3:])
-            l_g_cx = pixel_contextual_loss(outputs_flat, self.gt)
+            # l_g_cx = pixel_contextual_loss(self.output, self.gt)
+            l_g_cx = CF.contextual_loss(self.vgg(self.output)['conv3_4'],
+                                        self.vgg(self.gt)['conv3_4'], band_width=0.2, loss_type='cosine')
             l_g_total += l_g_cx
             loss_dict['l_g_cx'] = l_g_cx
 
@@ -225,14 +230,10 @@ class GFPGANPyramidModel(BaseModel):
                     loss_dict['l_g_style'] = l_g_style
 
             # gan loss
-            l_g_gan_avg = 0
-            for output in self.outputs:
-                fake_g_pred = self.net_d(output)
-                l_g_gan = self.cri_gan(fake_g_pred, True, is_disc=False)
-                l_g_gan_avg += l_g_gan
-            l_g_gan_avg /= self.outputs.size(0)
-            l_g_total += l_g_gan_avg
-            loss_dict['l_g_gan'] = l_g_gan_avg
+            fake_g_pred = self.net_d(self.output)
+            l_g_gan = self.cri_gan(fake_g_pred, True, is_disc=False)
+            l_g_total += l_g_gan
+            loss_dict['l_g_gan'] = l_g_gan
 
             # identity loss
             if self.use_identity:
@@ -258,11 +259,7 @@ class GFPGANPyramidModel(BaseModel):
             p.requires_grad = True
         self.optimizer_d.zero_grad()
 
-        fake_d_pred_avg = []
-        for output in self.outputs:
-            fake_d_pred = self.net_d(output.detach())
-            fake_d_pred_avg.append(fake_d_pred)
-        fake_d_pred = torch.mean(torch.stack(fake_d_pred_avg))
+        fake_d_pred = self.net_d(self.output.detach())
         real_d_pred = self.net_d(self.gt)
         l_d = self.cri_gan(real_d_pred, True, is_disc=True) + self.cri_gan(fake_d_pred, False, is_disc=True)
         loss_dict['l_d'] = l_d
@@ -287,14 +284,12 @@ class GFPGANPyramidModel(BaseModel):
         with torch.no_grad():
             if hasattr(self, 'net_g_ema'):
                 self.net_g_ema.eval()
-                self.outputs, _ = self.net_g_ema(self.lq)
-                self.output = torch.mean(self.outputs, dim=0)
+                self.output, _ = self.net_g_ema(self.lq)
             else:
                 logger = get_root_logger()
                 logger.warning('Do not have self.net_g_ema, use self.net_g.')
                 self.net_g.eval()
-                self.outputs, _ = self.net_g(self.lq)
-                self.output = torch.mean(self.outputs, dim=0)
+                self.output, _ = self.net_g(self.lq)
                 self.net_g.train()
 
     def dist_validation(self, dataloader, current_iter, tb_logger, save_img):
