@@ -201,7 +201,7 @@ class GFPGANCXModel(BaseModel):
             #     l_g_pix = self.cri_pix(self.output, self.gt)
             #     l_g_total += l_g_pix
             #     loss_dict['l_g_pix'] = l_g_pix
-            l_g_cx = pixel_contextual_loss(self.output, self.gt)
+            l_g_cx = pixel_contextual_loss(self.output, self.gt, window_size=self.opt['train'].get('r'))
             l_g_total += l_g_cx
             loss_dict['l_g_cx'] = l_g_cx
 

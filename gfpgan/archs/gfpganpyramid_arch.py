@@ -123,12 +123,11 @@ class StyleGAN2GeneratorSFTPY(StyleGAN2Generator):
                         multiple_skips = [skip]
                     for multiple_out, multiple_skip in zip(multiple_outs, multiple_skips):
                         multiple_out = conv1(multiple_out, latent[:, i], noise=noise1)
-                        out_same, out_sft = torch.split(multiple_out, int(multiple_out.size(1) // 2), dim=1)
                         condition_a1, condition_b1 = torch.split(conditions[i - 1], int(conditions[i - 1].size(1) // 2), dim=1)
                         condition_a2, condition_b2 = torch.split(conditions[i], int(conditions[i].size(1) // 2), dim=1)
-                        out_a = torch.cat([out_same, out_sft * condition_a1 + condition_a2], dim=1)
+                        out_a = multiple_out * condition_a1 + condition_a2
                         out_a = conv2(out_a, latent[:, i + 1], noise=noise2)
-                        out_b = torch.cat([out_same, out_sft * condition_b1 + condition_b2], dim=1)
+                        out_b = multiple_out * condition_b1 + condition_b2
                         out_b = conv2(out_b, latent[:, i + 1], noise=noise2)
                         skip_a = to_rgb(out_a, latent[:, i + 2], multiple_skip)
                         skip_b = to_rgb(out_b, latent[:, i + 2], multiple_skip)
@@ -143,13 +142,19 @@ class StyleGAN2GeneratorSFTPY(StyleGAN2Generator):
                     i+=2
                 else:
                     out = conv1(out, latent[:, i], noise=noise1)
-                    out_same, out_sft = torch.split(out, int(out.size(1) // 2), dim=1)
-                    out_sft = out_sft * conditions[i - 1] + conditions[i]
-                    out = torch.cat([out_same, out_sft], dim=1)
-                    out = conv2(out, latent[:, i + 1], noise=noise2)
-                    skip = to_rgb(out, latent[:, i + 2], skip)
+                    condition_a1, condition_b1 = torch.split(conditions[i - 1], int(conditions[i - 1].size(1) // 2), dim=1)
+                    condition_a2, condition_b2 = torch.split(conditions[i], int(conditions[i].size(1) // 2), dim=1)
+                    out_a = out * condition_a1 + condition_a2
+                    out_a = conv2(out_a, latent[:, i + 1], noise=noise2)
+                    out_b = out * condition_b1 + condition_b2
+                    out_b = conv2(out_b, latent[:, i + 1], noise=noise2)
+                    skip_a = to_rgb(out_a, latent[:, i + 2], skip)
+                    skip_b = to_rgb(out_b, latent[:, i + 2], skip)
+
+                    out = (out_a + out_b ) / 2
+                    skip = (skip_a + skip_b) / 2
+
                     i += 2
-        # print("len", len(multiple_skips))
         if return_latents:
             return torch.stack(multiple_skips), latent
         else:
@@ -248,12 +253,11 @@ class ResUpBlock(nn.Module):
 @ARCH_REGISTRY.register()
 class GFPGANPyramid(nn.Module):
     """Unet + StyleGAN2 decoder with SFT."""
-    # default channel_multiplier = 2 for unet and channel_multiplier // 2 for stylegan
     def __init__(
             self,
             out_size,
             num_style_feat=512,
-            channel_multiplier=2,
+            channel_multiplier=1,
             resample_kernel=(1, 3, 3, 1),
             decoder_load_path=None,
             fix_decoder=True,
@@ -323,7 +327,7 @@ class GFPGANPyramid(nn.Module):
             out_size=out_size,
             num_style_feat=num_style_feat,
             num_mlp=num_mlp,
-            channel_multiplier=channel_multiplier // 2,
+            channel_multiplier=channel_multiplier,
             resample_kernel=resample_kernel,
             lr_mlp=lr_mlp,
             narrow=narrow,
@@ -337,20 +341,33 @@ class GFPGANPyramid(nn.Module):
                 param.requires_grad = False
 
         # for SFT
-        self.condition_scale = nn.ModuleList()
-        self.condition_shift = nn.ModuleList()
+        self.condition_scale_a = nn.ModuleList()
+        self.condition_scale_b = nn.ModuleList()
+        self.condition_shift_a = nn.ModuleList()
+        self.condition_shift_b = nn.ModuleList()
         for i in range(3, self.log_size + 1):
             out_channels = channels[f'{2**i}']
             if sft_half:
                 sft_out_channels = out_channels
             else:
                 sft_out_channels = out_channels * 2
-            self.condition_scale.append(
+
+            self.condition_scale_a.append(
                 nn.Sequential(
                     EqualConv2d(out_channels, out_channels, 3, stride=1, padding=1, bias=True, bias_init_val=0),
                     ScaledLeakyReLU(0.2),
                     EqualConv2d(out_channels, sft_out_channels, 3, stride=1, padding=1, bias=True, bias_init_val=1)))
-            self.condition_shift.append(
+            self.condition_scale_b.append(
+                nn.Sequential(
+                    EqualConv2d(out_channels, out_channels, 3, stride=1, padding=1, bias=True, bias_init_val=0),
+                    ScaledLeakyReLU(0.2),
+                    EqualConv2d(out_channels, sft_out_channels, 3, stride=1, padding=1, bias=True, bias_init_val=1)))
+            self.condition_shift_a.append(
+                nn.Sequential(
+                    EqualConv2d(out_channels, out_channels, 3, stride=1, padding=1, bias=True, bias_init_val=0),
+                    ScaledLeakyReLU(0.2),
+                    EqualConv2d(out_channels, sft_out_channels, 3, stride=1, padding=1, bias=True, bias_init_val=0)))
+            self.condition_shift_b.append(
                 nn.Sequential(
                     EqualConv2d(out_channels, out_channels, 3, stride=1, padding=1, bias=True, bias_init_val=0),
                     ScaledLeakyReLU(0.2),
@@ -387,19 +404,21 @@ class GFPGANPyramid(nn.Module):
             # ResUpLayer
             feat = self.conv_body_up[i](feat)
             # generate scale and shift for SFT layer
-            scale = self.condition_scale[i](feat)
-            conditions.append(scale.clone())
-            shift = self.condition_shift[i](feat)
-            conditions.append(shift.clone())
+            scale_a = self.condition_scale_a[i](feat)
+            scale_b = self.condition_scale_b[i](feat)
+            conditions.append(torch.cat((scale_a, scale_b), dim=1))
+            shift_a = self.condition_shift_a[i](feat)
+            shift_b = self.condition_shift_b[i](feat)
+            conditions.append(torch.cat((shift_a, shift_b), dim=1))
             # generate rgb images
             if return_rgb:
                 out_rgbs.append(self.toRGB[i](feat))
 
-        # if save_feat_path is not None:
-        #     torch.save(conditions, save_feat_path)
-        # if load_feat_path is not None:
-        #     conditions = torch.load(load_feat_path)
-        #     conditions = [v.cuda() for v in conditions]
+        if save_feat_path is not None:
+            torch.save(conditions, save_feat_path)
+        if load_feat_path is not None:
+            conditions = torch.load(load_feat_path)
+            conditions = [v.cuda() for v in conditions]
 
         # decoder
         images, _ = self.stylegan_decoder([style_code],

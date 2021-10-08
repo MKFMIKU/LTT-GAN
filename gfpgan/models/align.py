@@ -17,9 +17,9 @@ def pixel_contextual_loss(x: torch.Tensor,
 
 def compute_cosine_distance(x, y):
     # channel-wise vectorization
-    N, C, *_ = x.size()
-    x = x.reshape(N, C, -1)  # (N, C, H*W)
-    y = y.reshape(N, C, -1)  # (N, C, N*H*W)
+    N, C, *_ = y.size()
+    x = x.reshape(N, C, -1)  # (N, C, N*H*W)
+    y = y.reshape(N, C, -1)  # (N, C, H*W)
 
     # mean shifting by channel-wise mean of `y`.
     y_mu = y.mean(dim=(0, 2), keepdim=True)

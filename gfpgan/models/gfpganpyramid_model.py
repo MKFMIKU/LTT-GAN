@@ -198,10 +198,11 @@ class GFPGANPyramidModel(BaseModel):
         loss_dict = OrderedDict()
         if (current_iter % self.net_d_iters == 0 and current_iter > self.net_d_init_iters):
             # pixel loss
-            # if self.cri_pix:
-            #     l_g_pix = self.cri_pix(self.output, self.gt)
-            #     l_g_total += l_g_pix
-            #     loss_dict['l_g_pix'] = l_g_pix
+            if self.cri_pix:
+                l_g_pix = self.cri_pix(self.output, self.gt) * 0.1
+                l_g_total += l_g_pix
+                loss_dict['l_g_pix'] = l_g_pix
+
             outputs_flat = self.outputs.transpose(0, 1).transpose(1, 2).reshape(self.outputs.shape[0], -1, *self.outputs.shape[3:])
             l_g_cx = pixel_contextual_loss(outputs_flat, self.gt)
             l_g_total += l_g_cx
@@ -214,9 +215,11 @@ class GFPGANPyramidModel(BaseModel):
                     l_g_total += l_pyramid
                     loss_dict[f'l_p_{2**(i+3)}'] = l_pyramid
 
+            batch_gt = self.gt.repeat(self.outputs.size(0), 1, 1, 1)
+            batch_outputs = self.outputs.view((-1, *self.outputs.shape[2:]))
             # perceptual loss
             if self.cri_perceptual:
-                l_g_percep, l_g_style = self.cri_perceptual(self.output, self.gt)
+                l_g_percep, l_g_style = self.cri_perceptual(batch_outputs, batch_gt)
                 if l_g_percep is not None:
                     l_g_total += l_g_percep
                     loss_dict['l_g_percep'] = l_g_percep
@@ -225,21 +228,17 @@ class GFPGANPyramidModel(BaseModel):
                     loss_dict['l_g_style'] = l_g_style
 
             # gan loss
-            l_g_gan_avg = 0
-            for output in self.outputs:
-                fake_g_pred = self.net_d(output)
-                l_g_gan = self.cri_gan(fake_g_pred, True, is_disc=False)
-                l_g_gan_avg += l_g_gan
-            l_g_gan_avg /= self.outputs.size(0)
-            l_g_total += l_g_gan_avg
-            loss_dict['l_g_gan'] = l_g_gan_avg
+            fake_g_pred = self.net_d(batch_outputs)
+            l_g_gan = self.cri_gan(fake_g_pred, True, is_disc=False)
+            l_g_total += l_g_gan
+            loss_dict['l_g_gan'] = l_g_gan
 
             # identity loss
             if self.use_identity:
                 identity_weight = self.opt['train']['identity_weight']
                 # get gray images and resize
-                out_gray = self.gray_resize_for_identity(self.output)
-                gt_gray = self.gray_resize_for_identity(self.gt)
+                out_gray = self.gray_resize_for_identity(batch_outputs)
+                gt_gray = self.gray_resize_for_identity(batch_gt)
 
                 identity_gt = self.network_identity(gt_gray).detach()
                 identity_out = self.network_identity(out_gray)
