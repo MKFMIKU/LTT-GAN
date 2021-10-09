@@ -1,5 +1,5 @@
 # general settings
-name: train_GFPGANv1_512_simple_blur2_cx_r16
+name: train_GFPGANv1_512_simple_blur2_cx_r8
 model_type: GFPGANCXModel
 num_gpu: 1
 manual_seed: 0

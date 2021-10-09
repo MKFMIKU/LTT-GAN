@@ -1,5 +1,5 @@
 # general settings
-name: train_GFPGANv1_512_simple_blur2_cx_r32
+name: train_GFPGANv1_512_simple_blur2_cx_r48
 model_type: GFPGANCXModel
 num_gpu: 1
 manual_seed: 0
@@ -85,7 +85,7 @@ path:
 
 # training settings
 train:
-  r: 32
+  r: 48
   optim_g:
     type: Adam
     lr: !!float 2e-3
