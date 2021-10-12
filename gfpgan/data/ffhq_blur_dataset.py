@@ -52,7 +52,8 @@ class FFHQBlurDataset(data.Dataset):
         self.downsample_range = opt['downsample_range']
         self.noise_range = opt['noise_range']
 
-        self.deformation = iaa.ElasticTransformation(alpha=(0, 50.0), sigma=(4.0, 5.0))
+        # we use alpha=(0, 50.0), sigma=(4.0, 5.0) in the ablation
+        self.deformation = iaa.ElasticTransformation(alpha=opt['elastic_alpha_range'], sigma=opt['elastic_sigma_range'])
         # self.jpeg_range = opt['jpeg_range']
 
         # color jitter

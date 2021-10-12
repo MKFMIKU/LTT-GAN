@@ -1,5 +1,5 @@
 # general settings
-name: train_GFPGANv1_512_simple_blur2_cx_py
+name: train_GFPGANv1_512_simple_blur2_cx_py_no_pixel
 model_type: GFPGANPyramidModel
 num_gpu: 1
 manual_seed: 0
