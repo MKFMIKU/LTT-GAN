@@ -57,78 +57,42 @@ class FFHQBlur2Dataset(data.Dataset):
         # self.jpeg_range = opt['jpeg_range']
 
         # color jitter
-        # self.color_jitter_prob = opt.get('color_jitter_prob')
-        # self.color_jitter_pt_prob = opt.get('color_jitter_pt_prob')
-        # self.color_jitter_shift = opt.get('color_jitter_shift', 20)
+        self.color_jitter_prob = opt.get('color_jitter_prob')
+        self.color_jitter_pt_prob = opt.get('color_jitter_pt_prob')
+        self.color_jitter_shift = opt.get('color_jitter_shift', 20)
         # to gray
-        # self.gray_prob = opt.get('gray_prob')
+        self.gray_prob = opt.get('gray_prob')
 
-        # logger = get_root_logger()
-        # logger.info(f'Blur: blur_kernel_size {self.blur_kernel_size}, '
-        #             f'sigma: [{", ".join(map(str, self.blur_sigma))}]')
-        # logger.info(f'Downsample: downsample_range [{", ".join(map(str, self.downsample_range))}]')
-        # logger.info(f'Noise: [{", ".join(map(str, self.noise_range))}]')
-        # logger.info(f'JPEG compression: [{", ".join(map(str, self.jpeg_range))}]')
+        self.color_jitter_shift /= 255.
 
-        # if self.color_jitter_prob is not None:
-        #     logger.info(f'Use random color jitter. Prob: {self.color_jitter_prob}, '
-        #                 f'shift: {self.color_jitter_shift}')
-        # if self.gray_prob is not None:
-        #     logger.info(f'Use random gray. Prob: {self.gray_prob}')
+    @staticmethod
+    def color_jitter(img, shift):
+        jitter_val = np.random.uniform(-shift, shift, 3).astype(np.float32)
+        img = img + jitter_val
+        img = np.clip(img, 0, 1)
+        return img
 
-        # self.color_jitter_shift /= 255.
+    @staticmethod
+    def color_jitter_pt(img, brightness, contrast, saturation, hue):
+        fn_idx = torch.randperm(4)
+        for fn_id in fn_idx:
+            if fn_id == 0 and brightness is not None:
+                brightness_factor = torch.tensor(1.0).uniform_(brightness[0], brightness[1]).item()
+                img = adjust_brightness(img, brightness_factor)
 
-    # @staticmethod
-    # def color_jitter(img, shift):
-    #     jitter_val = np.random.uniform(-shift, shift, 3).astype(np.float32)
-    #     img = img + jitter_val
-    #     img = np.clip(img, 0, 1)
-    #     return img
+            if fn_id == 1 and contrast is not None:
+                contrast_factor = torch.tensor(1.0).uniform_(contrast[0], contrast[1]).item()
+                img = adjust_contrast(img, contrast_factor)
 
-    # @staticmethod
-    # def color_jitter_pt(img, brightness, contrast, saturation, hue):
-    #     fn_idx = torch.randperm(4)
-    #     for fn_id in fn_idx:
-    #         if fn_id == 0 and brightness is not None:
-    #             brightness_factor = torch.tensor(1.0).uniform_(brightness[0], brightness[1]).item()
-    #             img = adjust_brightness(img, brightness_factor)
+            if fn_id == 2 and saturation is not None:
+                saturation_factor = torch.tensor(1.0).uniform_(saturation[0], saturation[1]).item()
+                img = adjust_saturation(img, saturation_factor)
 
-    #         if fn_id == 1 and contrast is not None:
-    #             contrast_factor = torch.tensor(1.0).uniform_(contrast[0], contrast[1]).item()
-    #             img = adjust_contrast(img, contrast_factor)
+            if fn_id == 3 and hue is not None:
+                hue_factor = torch.tensor(1.0).uniform_(hue[0], hue[1]).item()
+                img = adjust_hue(img, hue_factor)
+        return img
 
-    #         if fn_id == 2 and saturation is not None:
-    #             saturation_factor = torch.tensor(1.0).uniform_(saturation[0], saturation[1]).item()
-    #             img = adjust_saturation(img, saturation_factor)
-
-    #         if fn_id == 3 and hue is not None:
-    #             hue_factor = torch.tensor(1.0).uniform_(hue[0], hue[1]).item()
-    #             img = adjust_hue(img, hue_factor)
-    #     return img
-
-    # def get_component_coordinates(self, index, status):
-    #     components_bbox = self.components_list[f'{index:08d}']
-    #     if status[0]:  # hflip
-    #         # exchange right and left eye
-    #         tmp = components_bbox['left_eye']
-    #         components_bbox['left_eye'] = components_bbox['right_eye']
-    #         components_bbox['right_eye'] = tmp
-    #         # modify the width coordinate
-    #         components_bbox['left_eye'][0] = self.out_size - components_bbox['left_eye'][0]
-    #         components_bbox['right_eye'][0] = self.out_size - components_bbox['right_eye'][0]
-    #         components_bbox['mouth'][0] = self.out_size - components_bbox['mouth'][0]
-
-        # get coordinates
-        # locations = []
-        # for part in ['left_eye', 'right_eye', 'mouth']:
-        #     mean = components_bbox[part][0:2]
-        #     half_len = components_bbox[part][2]
-        #     if 'eye' in part:
-        #         half_len *= self.eye_enlarge_ratio
-        #     loc = np.hstack((mean - half_len + 1, mean + half_len))
-        #     loc = torch.from_numpy(loc).float()
-        #     locations.append(loc)
-        # return locations
 
     def __getitem__(self, index):
         if self.file_client is None:
@@ -143,9 +107,6 @@ class FFHQBlur2Dataset(data.Dataset):
         img_gt, status = augment(img_gt, hflip=self.opt['use_hflip'], rotation=False, return_status=True)
         h, w, _ = img_gt.shape
 
-        # if self.crop_components:
-        #     locations = self.get_component_coordinates(index, status)
-        #     loc_left_eye, loc_right_eye, loc_mouth = locations
 
         # ------------------------ generate lq image ------------------------ #
         # blur
@@ -164,34 +125,31 @@ class FFHQBlur2Dataset(data.Dataset):
         # noise
         if self.noise_range is not None:
             img_lq = degradations.random_add_gaussian_noise(img_lq, self.noise_range)
-        # # jpeg compression
-        # if self.jpeg_range is not None:
-        #     img_lq = degradations.random_add_jpg_compression(img_lq, self.jpeg_range)
 
         # resize to original size
         img_lq = cv2.resize(img_lq, (w, h), interpolation=cv2.INTER_LINEAR)
 
         # random color jitter (only for lq)
-        # if self.color_jitter_prob is not None and (np.random.uniform() < self.color_jitter_prob):
-        #     img_lq = self.color_jitter(img_lq, self.color_jitter_shift)
-        # # random to gray (only for lq)
-        # if self.gray_prob and np.random.uniform() < self.gray_prob:
-        #     img_lq = cv2.cvtColor(img_lq, cv2.COLOR_BGR2GRAY)
-        #     img_lq = np.tile(img_lq[:, :, None], [1, 1, 3])
-        #     if self.opt.get('gt_gray'):
-        #         img_gt = cv2.cvtColor(img_gt, cv2.COLOR_BGR2GRAY)
-        #         img_gt = np.tile(img_gt[:, :, None], [1, 1, 3])
+        if self.color_jitter_prob is not None and (np.random.uniform() < self.color_jitter_prob):
+            img_lq = self.color_jitter(img_lq, self.color_jitter_shift)
+        # random to gray (only for lq)
+        if self.gray_prob and np.random.uniform() < self.gray_prob:
+            img_lq = cv2.cvtColor(img_lq, cv2.COLOR_BGR2GRAY)
+            img_lq = np.tile(img_lq[:, :, None], [1, 1, 3])
+            if self.opt.get('gt_gray'):
+                img_gt = cv2.cvtColor(img_gt, cv2.COLOR_BGR2GRAY)
+                img_gt = np.tile(img_gt[:, :, None], [1, 1, 3])
 
         # BGR to RGB, HWC to CHW, numpy to tensor
         img_gt, img_lq = img2tensor([img_gt, img_lq], bgr2rgb=True, float32=True)
 
         # random color jitter (pytorch version) (only for lq)
-        # if self.color_jitter_pt_prob is not None and (np.random.uniform() < self.color_jitter_pt_prob):
-        #     brightness = self.opt.get('brightness', (0.5, 1.5))
-        #     contrast = self.opt.get('contrast', (0.5, 1.5))
-        #     saturation = self.opt.get('saturation', (0, 1.5))
-        #     hue = self.opt.get('hue', (-0.1, 0.1))
-        #     img_lq = self.color_jitter_pt(img_lq, brightness, contrast, saturation, hue)
+        if self.color_jitter_pt_prob is not None and (np.random.uniform() < self.color_jitter_pt_prob):
+            brightness = self.opt.get('brightness', (0.5, 1.5))
+            contrast = self.opt.get('contrast', (0.5, 1.5))
+            saturation = self.opt.get('saturation', (0, 1.5))
+            hue = self.opt.get('hue', (-0.1, 0.1))
+            img_lq = self.color_jitter_pt(img_lq, brightness, contrast, saturation, hue)
 
         # round and clip
         img_lq = torch.clamp((img_lq * 255.0).round(), 0, 255) / 255.
@@ -205,9 +163,6 @@ class FFHQBlur2Dataset(data.Dataset):
                 'lq': img_lq,
                 'gt': img_gt,
                 'gt_path': gt_path,
-                # 'loc_left_eye': loc_left_eye,
-                # 'loc_right_eye': loc_right_eye,
-                # 'loc_mouth': loc_mouth
             }
             return return_dict
         else:
