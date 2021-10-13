@@ -117,7 +117,7 @@ class StyleGAN2GeneratorSFTPY(StyleGAN2Generator):
             if i < len(conditions):
                 # print("ccc", i, out.shape, conditions[i-1].shape, conditions[i].shape, len(multiple_outs), len(multiple_skips))
                 # SFT part to combine the conditions
-                if i > 6:
+                if i > 8:
                     if len(multiple_outs) < 1:
                         multiple_outs = [out]
                         multiple_skips = [skip]
