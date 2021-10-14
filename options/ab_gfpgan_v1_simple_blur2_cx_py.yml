@@ -1,6 +1,6 @@
 # general settings
-name: train_GFPGANv1_512_simple_blur2
-model_type: GFPGANModel
+name: ab_GFPGANv1_512_simple_blur2_cx_py
+model_type: GFPGANPyramidModel
 num_gpu: 1
 manual_seed: 0
 
@@ -25,6 +25,10 @@ datasets:
     downsample_range: [1, 16]
     noise_range: [0, 25]
 
+    # Elastic Transformation
+    elastic_alpha_range: [0., 50.]
+    elastic_sigma_range: [4., 5.]
+
     # data loader
     use_shuffle: true
     num_worker_per_gpu: 8
@@ -46,7 +50,7 @@ datasets:
 
 # network structures
 network_g:
-  type: GFPGANv1
+  type: GFPGANPyramid
   out_size: 512
   num_style_feat: 512
   channel_multiplier: 1
@@ -58,7 +62,7 @@ network_g:
   input_is_latent: true
   different_w: true
   narrow: 1
-  sft_half: true
+  sft_half: false
 
 network_d:
   type: StyleGAN2Discriminator

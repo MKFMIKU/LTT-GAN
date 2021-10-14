@@ -1,5 +1,5 @@
 # general settings
-name: train_GFPGANv1_512_simple_blur2_cx_r16
+name: ab_GFPGANv1_512_simple_blur2_cx_r64
 model_type: GFPGANCXModel
 num_gpu: 1
 manual_seed: 0
@@ -24,6 +24,10 @@ datasets:
     blur_sigma: [1, 25]
     downsample_range: [1, 16]
     noise_range: [0, 25]
+
+    # Elastic Transformation
+    elastic_alpha_range: [0, 50.]
+    elastic_sigma_range: [4., 5.]
 
     # data loader
     use_shuffle: true
@@ -85,7 +89,7 @@ path:
 
 # training settings
 train:
-  r: 16
+  r: 64
   optim_g:
     type: Adam
     lr: !!float 2e-3
