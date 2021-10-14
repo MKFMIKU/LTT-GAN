@@ -32,7 +32,8 @@ class StyleGAN2GeneratorSFTPY(StyleGAN2Generator):
                  resample_kernel=(1, 3, 3, 1),
                  lr_mlp=0.01,
                  narrow=1,
-                 sft_half=False):
+                 sft_half=False,
+                 g=8):
         super(StyleGAN2GeneratorSFTPY, self).__init__(
             out_size,
             num_style_feat=num_style_feat,
@@ -42,6 +43,7 @@ class StyleGAN2GeneratorSFTPY(StyleGAN2Generator):
             lr_mlp=lr_mlp,
             narrow=narrow)
         self.sft_half = sft_half
+        self.g = g
 
     def forward(self,
                 styles,
@@ -117,7 +119,7 @@ class StyleGAN2GeneratorSFTPY(StyleGAN2Generator):
             if i < len(conditions):
                 # print("ccc", i, out.shape, conditions[i-1].shape, conditions[i].shape, len(multiple_outs), len(multiple_skips))
                 # SFT part to combine the conditions
-                if i > 8:
+                if i > self.g:
                     if len(multiple_outs) < 1:
                         multiple_outs = [out]
                         multiple_skips = [skip]
@@ -267,7 +269,8 @@ class GFPGANPyramid(nn.Module):
             input_is_latent=False,
             different_w=False,
             narrow=1,
-            sft_half=False):
+            sft_half=False,
+            g=8):
 
         super(GFPGANPyramid, self).__init__()
         self.input_is_latent = input_is_latent
@@ -331,7 +334,8 @@ class GFPGANPyramid(nn.Module):
             resample_kernel=resample_kernel,
             lr_mlp=lr_mlp,
             narrow=narrow,
-            sft_half=sft_half)
+            sft_half=sft_half,
+            g=g)
 
         if decoder_load_path:
             self.stylegan_decoder.load_state_dict(
