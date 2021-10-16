@@ -45,7 +45,7 @@ class FFHQBlur2Dataset(data.Dataset):
             self.paths = paths_from_folder(self.gt_folder)
 
         # degradations
-        self.blur_kernel_size = opt['blur_kernel_size']
+        self.blur_kernel_range = opt['blur_kernel_range']
         self.kernel_list = opt['kernel_list']
         self.kernel_prob = opt['kernel_prob']
         self.blur_sigma = opt['blur_sigma']
@@ -114,7 +114,8 @@ class FFHQBlur2Dataset(data.Dataset):
         kernel = degradations.random_mixed_kernels(
             self.kernel_list,
             self.kernel_prob,
-            self.blur_kernel_size,
+            int(np.random.uniform(self.blur_kernel_range[0], self.blur_kernel_range[1])) * 2 + 1,
+            # self.blur_kernel_size,
             self.blur_sigma,
             self.blur_sigma, [-math.pi, math.pi],
             noise_range=None)

@@ -156,8 +156,8 @@ class GFPGANModel(BaseModel):
         self.optimizers.append(self.optimizer_d)
 
     def feed_data(self, data):
-        self.gt = data['gt'].to(self.device)
-        self.lq = data['lq'].to(self.device)
+        self.gt = data['gt'].to(self.device, non_blocking=True)
+        self.lq = data['lq'].to(self.device, non_blocking=True)
 
     def construct_img_pyramid(self):
         pyramid_gt = [self.gt]

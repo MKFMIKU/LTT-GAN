@@ -54,18 +54,18 @@ class FFHQTurbulenceDataset(data.Dataset):
             h, w, _ = img_gt.shape
             # ------------------------ generate lq image ------------------------ #
             # blur
-            kernel = degradations.random_mixed_kernels(
-                self.kernel_list,
-                self.kernel_prob,
-                self.blur_kernel_size,
-                self.blur_sigma,
-                self.blur_sigma, [-math.pi, math.pi],
-                noise_range=None)
-            img_lq = cv2.filter2D(img_lq, -1, kernel)
-            # downsample
-            scale = np.random.uniform(self.downsample_range[0], self.downsample_range[1])
-            img_lq = cv2.resize(img_lq, (int(w // scale), int(h // scale)), interpolation=cv2.INTER_LINEAR)
-            img_lq = cv2.resize(img_lq, (w, h), interpolation=cv2.INTER_LINEAR)
+            # kernel = degradations.random_mixed_kernels(
+            #     self.kernel_list,
+            #     self.kernel_prob,
+            #     self.blur_kernel_size,
+            #     self.blur_sigma,
+            #     self.blur_sigma, [-math.pi, math.pi],
+            #     noise_range=None)
+            # img_lq = cv2.filter2D(img_lq, -1, kernel)
+            # # downsample
+            # scale = np.random.uniform(self.downsample_range[0], self.downsample_range[1])
+            # img_lq = cv2.resize(img_lq, (int(w // scale), int(h // scale)), interpolation=cv2.INTER_LINEAR)
+            # img_lq = cv2.resize(img_lq, (w, h), interpolation=cv2.INTER_LINEAR)
 
         img_gt, img_lq = img2tensor([img_gt, img_lq], bgr2rgb=True, float32=True)
 

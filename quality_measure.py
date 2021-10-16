@@ -50,8 +50,8 @@ if __name__ == "__main__":
     for im1_path, im2_path in tqdm(zip(list_im1, list_im2), total=len(list_im1)):
         data, gt = Image.open(im1_path), Image.open(im2_path)
         data_th, gt_th = (
-            to_tensor(data).unsqueeze(0).to(device),
-            to_tensor(gt).unsqueeze(0).to(device),
+            to_tensor(data).unsqueeze(0).to(device, non_blocking=True),
+            to_tensor(gt).unsqueeze(0).to(device, non_blocking=True),
         )
         data_th = torch.clip(data_th, 0., 1.)
         gt_th = torch.clip(gt_th, 0., 1.)
