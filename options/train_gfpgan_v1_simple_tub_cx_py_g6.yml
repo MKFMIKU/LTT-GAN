@@ -18,12 +18,12 @@ datasets:
     std: [0.5, 0.5, 0.5]
     out_size: 512
 
-    blur_kernel_size: 101
+    blur_kernel_range: [25, 45]
     kernel_list: ['iso', 'aniso']
     kernel_prob: [0.5, 0.5]
-    blur_sigma: [5, 15]
+    blur_sigma: [5, 25]
     downsample_range: [1, 8]
-    noise_range: ~
+    noise_range: [0, 20]
 
     # color jitter and gray
     color_jitter_prob: 0.3
@@ -37,10 +37,11 @@ datasets:
 
     # data loader
     use_shuffle: true
-    num_worker_per_gpu: 8
+    num_worker_per_gpu: 2
     batch_size_per_gpu: 1
     dataset_enlarge_ratio: 1
-    prefetch_mode: cuda
+    prefetch_mode: cpu
+    num_prefetch_queue: 4
     pin_memory: true
 
   val:
@@ -161,7 +162,7 @@ train:
 
 # validation settings
 val:
-  val_freq: !!float 1e3
+  val_freq: !!float 5e3
   save_img: true
 
   metrics:
@@ -176,7 +177,7 @@ logger:
   save_checkpoint_freq: !!float 5e3
   use_tb_logger: true
   wandb:
-    project: gfpgan
+    project: gfpgan-tub
     resume_id: ~
 
 # dist training settings
