@@ -1,7 +1,7 @@
 # general settings
-name: train_GFPGANv1_512_simple_tub_cx_py_g6_noise
+name: train_GFPGANv1_512_simple_tub_cx_py_g8
 model_type: GFPGANPyramidModel
-num_gpu: 1
+num_gpu: 4
 manual_seed: 0
 
 # dataset and data loader settings
@@ -18,10 +18,10 @@ datasets:
     std: [0.5, 0.5, 0.5]
     out_size: 512
 
-    blur_kernel_size: 101
+    blur_kernel_range: [25, 45]
     kernel_list: ['iso', 'aniso']
     kernel_prob: [0.5, 0.5]
-    blur_sigma: [5, 15]
+    blur_sigma: [5, 25]
     downsample_range: [1, 8]
     noise_range: [0, 20]
 
@@ -37,16 +37,17 @@ datasets:
 
     # data loader
     use_shuffle: true
-    num_worker_per_gpu: 8
-    batch_size_per_gpu: 1
+    num_worker_per_gpu: 6
+    batch_size_per_gpu: 3
     dataset_enlarge_ratio: 1
-    prefetch_mode: cuda
+    prefetch_mode: cpu
+    num_prefetch_queue:
     pin_memory: true
 
   val:
     name: validation
     type: FFHQTurbulenceDataset
-    dataroot_gt: /data/datasets/Turbulence/Tubfaces95/validation/tubimages/
+    dataroot_gt: /data/datasets/Tubfaces95/validation/tubimages/
     phase: val
     io_backend:
       type: disk
@@ -69,7 +70,7 @@ network_g:
   different_w: true
   narrow: 1
   sft_half: false
-  g: 6
+  g: 8
 
 network_d:
   type: StyleGAN2Discriminator
@@ -161,7 +162,7 @@ train:
 
 # validation settings
 val:
-  val_freq: !!float 1e3
+  val_freq: !!float 5e3
   save_img: true
 
   metrics:
@@ -176,7 +177,7 @@ logger:
   save_checkpoint_freq: !!float 5e3
   use_tb_logger: true
   wandb:
-    project: gfpgan
+    project: gfpgan-tub
     resume_id: ~
 
 # dist training settings
