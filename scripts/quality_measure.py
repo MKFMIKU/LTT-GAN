@@ -48,7 +48,7 @@ if __name__ == "__main__":
     msssims = []
     lpipss = []
     for im1_path, im2_path in tqdm(zip(list_im1, list_im2), total=len(list_im1)):
-        data, gt = Image.open(im1_path), Image.open(im2_path)
+        gt, data  = Image.open(im1_path), Image.open(im2_path)
         data_th, gt_th = (
             to_tensor(data).unsqueeze(0).to(device, non_blocking=True),
             to_tensor(gt).unsqueeze(0).to(device, non_blocking=True),
