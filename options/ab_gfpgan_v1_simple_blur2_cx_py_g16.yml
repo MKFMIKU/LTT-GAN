@@ -1,6 +1,6 @@
 # general settings
-name: ab_GFPGANv1_512_simple_blur2_cx_r64
-model_type: GFPGANCXModel
+name: ab_GFPGANv1_512_simple_blur2_cx_py_g16
+model_type: GFPGANPyramidModel
 num_gpu: 1
 manual_seed: 0
 
@@ -26,7 +26,7 @@ datasets:
     noise_range: [0, 25]
 
     # Elastic Transformation
-    elastic_alpha_range: [0, 50.]
+    elastic_alpha_range: [0., 50.]
     elastic_sigma_range: [4., 5.]
 
     # data loader
@@ -50,7 +50,7 @@ datasets:
 
 # network structures
 network_g:
-  type: GFPGANv1
+  type: GFPGANPyramid
   out_size: 512
   num_style_feat: 512
   channel_multiplier: 1
@@ -62,7 +62,8 @@ network_g:
   input_is_latent: true
   different_w: true
   narrow: 1
-  sft_half: true
+  sft_half: false
+  g: 6
 
 network_d:
   type: StyleGAN2Discriminator
@@ -89,7 +90,6 @@ path:
 
 # training settings
 train:
-  r: 64
   optim_g:
     type: Adam
     lr: !!float 2e-3

@@ -1,6 +1,6 @@
 # general settings
-name: ab_GFPGANv1_512_simple_blur2_cx_r64
-model_type: GFPGANCXModel
+name: ab_GFPGANv1_512_simple_blur2_nogan_nod_noid
+model_type: GFPModel
 num_gpu: 1
 manual_seed: 0
 
@@ -50,7 +50,7 @@ datasets:
 
 # network structures
 network_g:
-  type: GFPGANv1
+  type: GFPv1
   out_size: 512
   num_style_feat: 512
   channel_multiplier: 1
@@ -89,7 +89,6 @@ path:
 
 # training settings
 train:
-  r: 64
   optim_g:
     type: Adam
     lr: !!float 2e-3
@@ -147,7 +146,7 @@ train:
   # r1 regularization for discriminator
   r1_reg_weight: 10
   # identity loss
-  identity_weight: 10
+  identity_weight: 0
 
   net_d_iters: 1
   net_d_init_iters: 0

@@ -40,7 +40,7 @@ datasets:
   val:
     name: validation
     type: FFHQTurbulenceDataset
-    dataroot_gt: /data/datasets/Tubfaces95/validation/tubimages/
+    dataroot_gt: /data/datasets/Turbulence/Tubfaces95/validation/tubimages/
     phase: val
     io_backend:
       type: disk

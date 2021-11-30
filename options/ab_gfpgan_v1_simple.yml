@@ -1,6 +1,6 @@
 # general settings
-name: ab_GFPGANv1_512_simple_blur2_cx_r64
-model_type: GFPGANCXModel
+name: ab_GFPGANv1_512_simple_blur2
+model_type: GFPGANModel
 num_gpu: 1
 manual_seed: 0
 
@@ -8,7 +8,7 @@ manual_seed: 0
 datasets:
   train:
     name: FFHQ
-    type: FFHQBlurDataset
+    type: FFHQDegradationDataset
     dataroot_gt: /data/datasets/ffhq-dataset/images512x512
     io_backend:
       type: disk
@@ -18,16 +18,25 @@ datasets:
     std: [0.5, 0.5, 0.5]
     out_size: 512
 
-    blur_kernel_range: [5, 50]
+    blur_kernel_size: 41
     kernel_list: ['iso', 'aniso']
     kernel_prob: [0.5, 0.5]
-    blur_sigma: [1, 25]
-    downsample_range: [1, 16]
-    noise_range: [0, 25]
+    blur_sigma: [0.1, 10]
+    downsample_range: [0.8, 8]
+    noise_range: [0, 20]
+    jpeg_range: [60, 100]
 
-    # Elastic Transformation
-    elastic_alpha_range: [0, 50.]
-    elastic_sigma_range: [4., 5.]
+    # color jitter and gray
+    color_jitter_prob: 0.3
+    color_jitter_shift: 20
+    color_jitter_pt_prob: 0.3
+    gray_prob: 0.01
+
+    # If you do not want colorization, please set
+    # color_jitter_prob: ~
+    # color_jitter_pt_prob: ~
+    # gray_prob: 0.01
+    # gt_gray: True
 
     # data loader
     use_shuffle: true
@@ -89,7 +98,6 @@ path:
 
 # training settings
 train:
-  r: 64
   optim_g:
     type: Adam
     lr: !!float 2e-3
